@@ -31,3 +31,8 @@ tasks.withType<Javadoc> {
     docletOptions.addBooleanOption("html5", true)
     docletOptions.addStringOption("Xdoclint:none", "-quiet")
 }
+
+java {
+    withJavadocJar()
+    withSourcesJar()
+}
