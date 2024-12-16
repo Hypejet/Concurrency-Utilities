@@ -77,7 +77,7 @@ public final class LongAcquirable extends Acquirable<LongAcquisition> {
 
         if (!(foundAcquisition instanceof WriteLongAcquisition writeAcquisition)) {
             throw new IllegalArgumentException("The caller thread has already created an acquisition," +
-                    "but it is not a write acquisition");
+                    " but it is not a write acquisition");
         }
         return new ReusedWriteLongAcquisition(writeAcquisition);
     }

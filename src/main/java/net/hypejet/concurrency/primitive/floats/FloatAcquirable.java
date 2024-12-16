@@ -77,7 +77,7 @@ public final class FloatAcquirable extends Acquirable<FloatAcquisition> {
 
         if (!(foundAcquisition instanceof WriteFloatAcquisition writeAcquisition)) {
             throw new IllegalArgumentException("The caller thread has already created an acquisition," +
-                    "but it is not a write acquisition");
+                    " but it is not a write acquisition");
         }
         return new ReusedWriteFloatAcquisition(writeAcquisition);
     }

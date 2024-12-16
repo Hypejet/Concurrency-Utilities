@@ -66,7 +66,7 @@ public abstract class MapAcquirable<K, V, M extends Map<K, V>> extends Acquirabl
 
         if (!(foundAcquisition instanceof WriteMapAcquisition<K, V, M> writeAcquisition)) {
             throw new IllegalArgumentException("The caller thread has already created an acquisition," +
-                    "but it is not a write acquisition");
+                    " but it is not a write acquisition");
         }
         return new ReusedWriteMapAcquisition<>(writeAcquisition);
     }

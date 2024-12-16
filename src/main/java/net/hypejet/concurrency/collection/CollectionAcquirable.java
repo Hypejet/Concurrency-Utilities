@@ -88,7 +88,7 @@ public abstract class CollectionAcquirable<V, C extends Collection<V>>
 
         if (!(foundAcquisition instanceof WriteCollectionAcquisition<V, C> writeAcquisition)) {
             throw new IllegalArgumentException("The caller thread has already created an acquisition," +
-                    "but it is not a write acquisition");
+                    " but it is not a write acquisition");
         }
         return new ReusedWriteCollectionAcquisition<>(writeAcquisition);
     }

@@ -77,7 +77,7 @@ public final class DoubleAcquirable extends Acquirable<DoubleAcquisition> {
 
         if (!(foundAcquisition instanceof WriteDoubleAcquisition writeAcquisition)) {
             throw new IllegalArgumentException("The caller thread has already created an acquisition," +
-                    "but it is not a write acquisition");
+                    " but it is not a write acquisition");
         }
         return new ReusedWriteDoubleAcquisition(writeAcquisition);
     }

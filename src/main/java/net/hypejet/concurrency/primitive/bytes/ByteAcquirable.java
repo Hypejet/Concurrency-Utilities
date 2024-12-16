@@ -77,7 +77,7 @@ public final class ByteAcquirable extends Acquirable<ByteAcquisition> {
 
         if (!(foundAcquisition instanceof WriteByteAcquisition writeAcquisition)) {
             throw new IllegalArgumentException("The caller thread has already created an acquisition," +
-                    "but it is not a write acquisition");
+                    " but it is not a write acquisition");
         }
         return new ReusedWriteByteAcquisition(writeAcquisition);
     }

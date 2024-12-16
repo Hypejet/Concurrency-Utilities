@@ -67,7 +67,7 @@ public final class CharacterAcquirable extends Acquirable<CharacterAcquisition> 
 
         if (!(foundAcquisition instanceof WriteCharacterAcquisition writeAcquisition)) {
             throw new IllegalArgumentException("The caller thread has already created an acquisition," +
-                    "but it is not a write acquisition");
+                    " but it is not a write acquisition");
         }
         return new ReusedWriteCharacterAcquisition(writeAcquisition);
     }

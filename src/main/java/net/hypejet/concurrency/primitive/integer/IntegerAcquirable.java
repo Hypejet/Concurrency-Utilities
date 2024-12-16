@@ -77,7 +77,7 @@ public final class IntegerAcquirable extends Acquirable<IntegerAcquisition> {
 
         if (!(foundAcquisition instanceof WriteIntegerAcquisition writeAcquisition)) {
             throw new IllegalArgumentException("The caller thread has already created an acquisition," +
-                    "but it is not a write acquisition");
+                    " but it is not a write acquisition");
         }
         return new ReusedWriteIntegerAcquisition(writeAcquisition);
     }

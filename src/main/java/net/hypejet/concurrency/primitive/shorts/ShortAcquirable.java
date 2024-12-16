@@ -77,7 +77,7 @@ public final class ShortAcquirable extends Acquirable<ShortAcquisition> {
 
         if (!(foundAcquisition instanceof WriteShortAcquisition writeAcquisition)) {
             throw new IllegalArgumentException("The caller thread has already created an acquisition," +
-                    "but it is not a write acquisition");
+                    " but it is not a write acquisition");
         }
         return new ReusedWriteShortAcquisition(writeAcquisition);
     }
