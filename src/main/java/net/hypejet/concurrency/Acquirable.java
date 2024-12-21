@@ -7,6 +7,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -43,6 +44,17 @@ public abstract class Acquirable<A extends Acquisition> {
         } finally {
             this.acquisitionsLock.unlock();
         }
+    }
+
+    /**
+     * Creates a new {@linkplain Condition condition} of a write lock of this {@linkplain Acquirable acquirable}.
+     *
+     * @return the condition
+     * @since 1.0
+     */
+    @Contract(pure = true)
+    public final @NotNull Condition newCondition() {
+        return this.lock.writeLock().newCondition();
     }
 
     /**
