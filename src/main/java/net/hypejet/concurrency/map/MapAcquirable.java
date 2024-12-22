@@ -1,13 +1,11 @@
 package net.hypejet.concurrency.map;
 
 import net.hypejet.concurrency.Acquirable;
-import net.hypejet.concurrency.collection.CollectionAcquirable;
 import net.hypejet.concurrency.collection.CollectionAcquisition;
 import net.hypejet.concurrency.collection.WriteCollectionAcquisition;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiFunction;
