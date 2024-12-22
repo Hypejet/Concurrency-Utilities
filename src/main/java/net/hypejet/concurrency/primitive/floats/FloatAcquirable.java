@@ -123,7 +123,7 @@ public final class FloatAcquirable extends Acquirable<FloatAcquisition> {
 
         @Override
         public void set(float value) {
-            this.runChecks();
+            this.ensurePermittedAndLocked();
             this.acquirable.value = value;
         }
     }
@@ -153,7 +153,7 @@ public final class FloatAcquirable extends Acquirable<FloatAcquisition> {
 
         @Override
         public final float get() {
-            this.runChecks();
+            this.ensurePermittedAndLocked();
             return this.acquirable.value;
         }
 

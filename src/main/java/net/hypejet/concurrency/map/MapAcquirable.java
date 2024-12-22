@@ -1,5 +1,6 @@
 package net.hypejet.concurrency.map;
 
+import net.hypejet.concurrency.Acquisition;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -15,8 +16,7 @@ import java.util.Map;
  * @since 1.0
  * @see AbstractMapAcquirable
  */
-public abstract class MapAcquirable<K, V>
-        extends AbstractMapAcquirable<K, V, Map<K, V>, MapAcquisition<K, V, Map<K, V>>> {
+public abstract class MapAcquirable<K, V> extends AbstractMapAcquirable<K, V, Map<K, V>, MapAcquisition<K, V>> {
     /**
      * Constructs the {@linkplain MapAcquirable map acquirable} with no initial entries.
      *
@@ -49,16 +49,16 @@ public abstract class MapAcquirable<K, V>
      * @since 1.0
      */
     @Override
-    public final @NotNull MapAcquisition<K, V, Map<K, V>> acquireRead() {
-        MapAcquisition<K, V, Map<K, V>> foundAcquisition = this.findAcquisition();
+    public final @NotNull MapAcquisition<K, V> acquireRead() {
+        MapAcquisition<K, V> foundAcquisition = this.findAcquisition();
         if (foundAcquisition != null)
             return new ReusedMapAcquisition<>(foundAcquisition);
-        return new ReadMapAcquisitionImpl<>(this);
+        return new MapAcquisitionImpl<>(this, Acquisition.AcquisitionType.READ);
     }
 
     /**
-     * Creates {@linkplain WriteMapAcquisition a write map acquisition} of this
-     * {@linkplain MapAcquirable map acquirable} that supports write operations.
+     * Creates {@linkplain MapAcquisition a map acquisition} of this {@linkplain MapAcquirable map acquirable} that
+     * supports write operations.
      *
      * <p>If the caller thread has already created a write acquisition a special implementation is used, which
      * reuses it, does nothing when {@link MapAcquisition#close()} is called and always returns {@code true}
@@ -72,16 +72,16 @@ public abstract class MapAcquirable<K, V>
      *                                  acquisition
      */
     @Override
-    public final @NotNull WriteMapAcquisition<K, V, Map<K, V>> acquireWrite() {
-        MapAcquisition<K, V, Map<K, V>> foundAcquisition = this.findAcquisition();
+    public final @NotNull MapAcquisition<K, V> acquireWrite() {
+        MapAcquisition<K, V> foundAcquisition = this.findAcquisition();
         if (foundAcquisition == null)
-            return new WriteMapAcquisitionImpl<>(this);
+            return new MapAcquisitionImpl<>(this, Acquisition.AcquisitionType.WRITE);
 
-        if (!(foundAcquisition instanceof WriteMapAcquisition<K, V, Map<K, V>> writeAcquisition)) {
-            throw new IllegalArgumentException("The caller thread has already created an acquisition," +
-                    " but it is not a write acquisition");
+        if (foundAcquisition.acquisitionType() != Acquisition.AcquisitionType.WRITE) {
+            throw new IllegalArgumentException("The caller thread has already created an acquisition, but it is not" +
+                    "a write acquisition");
         }
-        return new ReusedWriteMapAcquisition<>(writeAcquisition);
+        return new ReusedMapAcquisition<>(foundAcquisition);
     }
 
     @Override
@@ -90,56 +90,28 @@ public abstract class MapAcquirable<K, V>
     }
 
     /**
-     * Represents an implementation of {@linkplain AbstractReadMapAcquisition an abstract read map acquisition}.
+     * Represents an implementation of {@linkplain AbstractMapAcquisition an abstract map acquisition}.
      *
      * @param <K> a type of key of the map
      * @param <V> a type of value of the map
      * @since 1.0
-     * @see AbstractReadMapAcquisition
+     * @see AbstractMapAcquisition
      */
-    private static final class ReadMapAcquisitionImpl<K, V> extends
-            AbstractReadMapAcquisition<K, V, Map<K, V>, MapAcquisition<K, V, Map<K, V>>, MapAcquirable<K, V>> {
+    private static final class MapAcquisitionImpl<K, V>
+            extends AbstractMapAcquisition<K, V, Map<K, V>, MapAcquisition<K, V>, MapAcquirable<K, V>> {
         /**
-         * Constructs the {@linkplain ReadMapAcquisitionImpl read map acquisition implementation}.
+         * Constructs the {@linkplain MapAcquisitionImpl read map acquisition implementation}.
          *
          * @param acquirable an acquirable whose map is guarded by the lock
+         * @param type a type, of which the acquisition should be
          * @since 1.0
          */
-        private ReadMapAcquisitionImpl(@NotNull MapAcquirable<K, V> acquirable) {
-            // There is no need to do nullability checks, the superclass will do that for us
-            super(acquirable);
+        private MapAcquisitionImpl(@NotNull MapAcquirable<K, V> acquirable, @NotNull AcquisitionType type) {
+            super(acquirable, type);
         }
 
         @Override
-        protected @NotNull MapAcquisition<K, V, Map<K, V>> cast() {
-            return this;
-        }
-    }
-
-    /**
-     * Represents an implementation of {@linkplain AbstractWriteMapAcquisition an abstract write map acquisition}.
-     *
-     * @param <K> a type of key of the map
-     * @param <V> a type of value of the map
-     * @since 1.0
-     * @see AbstractWriteMapAcquisition
-     */
-    private static final class WriteMapAcquisitionImpl<K, V> extends
-            AbstractWriteMapAcquisition<K, V, Map<K, V>, MapAcquisition<K, V, Map<K, V>>, MapAcquirable<K, V>>
-            implements WriteMapAcquisition<K, V, Map<K, V>>{
-        /**
-         * Constructs the {@linkplain WriteMapAcquisitionImpl write map acquisition implementation}.
-         *
-         * @param acquirable an acquirable whose map is guarded by the lock
-         * @since 1.0
-         */
-        private WriteMapAcquisitionImpl(@NotNull MapAcquirable<K, V> acquirable) {
-            // There is no need to do nullability checks, the superclass will do that for us
-            super(acquirable);
-        }
-
-        @Override
-        protected @NotNull MapAcquisition<K, V, Map<K, V>> cast() {
+        protected @NotNull MapAcquisition<K, V> cast() {
             return this;
         }
     }

@@ -147,6 +147,7 @@ public abstract class Acquirable<A extends Acquisition> {
 
         protected final AE acquirable;
 
+        private final AcquisitionType acquisitionType;
         private final Lock lock;
         private final Thread owner;
 
@@ -161,7 +162,7 @@ public abstract class Acquirable<A extends Acquisition> {
          */
         protected AbstractAcquisition(@NotNull AE acquirable, @NotNull AcquisitionType type) {
             this.acquirable = Objects.requireNonNull(acquirable, "The acquirable must not be null");
-            Objects.requireNonNull(type, "The type must not be null");
+            this.acquisitionType = Objects.requireNonNull(type, "The type must not be null");
 
             // Java for some reason needs a cast of the acquirable to access private methods and fields
             Acquirable<AN> castAcquirable = acquirable;
@@ -180,7 +181,7 @@ public abstract class Acquirable<A extends Acquisition> {
 
         @Override
         public final void close() {
-            this.runChecks();
+            this.ensurePermittedAndLocked();
 
             if (this.unlocked) return;
             this.unlocked = true;
@@ -198,24 +199,24 @@ public abstract class Acquirable<A extends Acquisition> {
             return this.unlocked;
         }
 
-        /**
-         * Checks whether the caller thread owns the acquisition and whether the acquisition has been not already
-         * unlocked.
-         *
-         * @since 1.0
-         */
-        protected final void runChecks() {
+        @Override
+        public final void ensurePermittedAndLocked() {
             this.checkCallerThread();
             if (this.unlocked)
                 throw new IllegalStateException("The acquisition has been already unlocked");
         }
 
+        @Override
+        public final @NotNull AcquisitionType acquisitionType() {
+            return this.acquisitionType;
+        }
+
         /**
-         * Checks whether the caller thread owns the acquisition.
+         * Checks whether the caller thread owns this acquisition.
          *
          * @since 1.0
          */
-        protected final void checkCallerThread() {
+        private void checkCallerThread() {
             if (Thread.currentThread() != this.owner)
                 throw new IllegalArgumentException("The caller thread does not own the acquisition");
         }
@@ -245,29 +246,6 @@ public abstract class Acquirable<A extends Acquisition> {
                 throw new IllegalArgumentException("The cast acquisition must refer to the same instance as \"this\"");
             return cast;
         }
-
-        /**
-         * Represents a type of {@linkplain AbstractAcquisition an abstract acquisition}.
-         *
-         * @since 1.0
-         * @see AbstractAcquisition
-         */
-        protected enum AcquisitionType {
-            /**
-             * {@linkplain AcquisitionType An acquisition type} indicating that the acquisition should acquire a read
-             * lock.
-             *
-             * @since 1.0
-             */
-            READ,
-            /**
-             * {@linkplain AcquisitionType An acquisition type} indicating that the acquisition should acquire a write
-             * lock.
-             *
-             * @since 1.0
-             */
-            WRITE
-        }
     }
 
     /**
@@ -294,13 +272,23 @@ public abstract class Acquirable<A extends Acquisition> {
 
         @Override
         public final boolean isUnlocked() {
-            // Assume that the acquisition has been unlocked, since it only relies on another acquisition
+            // Assume that the acquisition has been unlocked, since it relies on another acquisition
             return true;
         }
 
         @Override
         public final void close() {
             // NOOP
+        }
+
+        @Override
+        public final void ensurePermittedAndLocked() {
+            this.originalAcquisition.ensurePermittedAndLocked();
+        }
+
+        @Override
+        public final @NotNull AcquisitionType acquisitionType() {
+            return this.originalAcquisition.acquisitionType();
         }
     }
 }

@@ -2,12 +2,16 @@ package net.hypejet.concurrency.map;
 
 import net.hypejet.concurrency.Acquirable;
 import net.hypejet.concurrency.collection.CollectionAcquisition;
-import net.hypejet.concurrency.collection.WriteCollectionAcquisition;
+import net.hypejet.concurrency.util.collection.GuardedCollection;
+import net.hypejet.concurrency.util.collection.GuardedSet;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Collection;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
@@ -22,7 +26,7 @@ import java.util.function.Function;
  * @see Map
  * @see Acquirable
  */
-public abstract class AbstractMapAcquirable<K, V, M extends Map<K, V>, A extends MapAcquisition<K, V, M>>
+public abstract class AbstractMapAcquirable<K, V, M extends Map<K, V>, A extends MapAcquisition<K, V>>
         extends Acquirable<A> {
     
     private final @NotNull M map;
@@ -69,199 +73,6 @@ public abstract class AbstractMapAcquirable<K, V, M extends Map<K, V>, A extends
     protected abstract @NotNull M createReadOnlyView(@NotNull M map);
 
     /**
-     * Represents an implementation of {@linkplain AbstractMapAcquisition an abstract map acquisition}.
-     *
-     * @param <K> a type of key of the held map
-     * @param <V> a type of value of the held map
-     * @param <M> a type of the held map
-     * @param <AN> a type of map acquisition of the following map acquirable
-     * @param <AE> a type of acquirable that the map acquisition should be registered in
-     * @since 1.0
-     * @see AbstractMapAcquisition
-     */
-    protected static abstract class AbstractReadMapAcquisition
-            <K, V, M extends Map<K, V>,
-                    AN extends MapAcquisition<K, V, M>,
-                    AE extends AbstractMapAcquirable<K, V, M, AN>>
-            extends AbstractMapAcquisition<K, V, M, AN, AE> {
-        /**
-         * Constructs the {@linkplain AbstractReadMapAcquisition abstract read map acquisition}.
-         *
-         * @param acquirable an acquirable whose map is guarded by the lock
-         * @since 1.0
-         */
-        protected AbstractReadMapAcquisition(@NotNull AE acquirable) {
-            // There is no need to do nullability checks, the superclass will do that for us
-            super(acquirable, AcquisitionType.READ);
-        }
-    }
-
-    /**
-     * Represents an implementation of {@linkplain AbstractMapAcquisition an abstract map acquisition}
-     * and {@linkplain WriteMapAcquisition a write map acquisition}.
-     *
-     * @param <K> a type of key of the held map
-     * @param <V> a type of value of the held map
-     * @param <M> a type of the held map
-     * @param <AN> a type of map acquisition of the following map acquirable
-     * @param <AE> a type of acquirable that the map acquisition should be registered in
-     * @since 1.0
-     * @see WriteCollectionAcquisition
-     * @see AbstractMapAcquisition
-     */
-    protected static abstract class AbstractWriteMapAcquisition
-            <K, V, M extends Map<K, V>,
-                    AN extends MapAcquisition<K, V, M>,
-                    AE extends AbstractMapAcquirable<K, V, M, AN>>
-            extends AbstractMapAcquisition<K, V, M, AN, AE> implements WriteMapAcquisition<K, V, M> {
-        /**
-         * Constructs the {@linkplain AbstractWriteMapAcquisition abstract write map acquisition}.
-         *
-         * @param acquirable an acquirable whose map is guarded by the lock
-         * @since 1.0
-         */
-        protected AbstractWriteMapAcquisition(@NotNull AE acquirable) {
-            // There is no need to do nullability checks, the superclass will do that for us
-            super(acquirable, AcquisitionType.WRITE);
-        }
-
-        @Override
-        public @Nullable V put(@NotNull K key, @NotNull V value) {
-            this.runChecks();
-
-            Objects.requireNonNull(key, "The key must not be null");
-            Objects.requireNonNull(value, "The value must not be null");
-
-            return this.writableMap().put(key, value);
-        }
-
-        @Override
-        public @Nullable V remove(@NotNull K key) {
-            this.runChecks();
-            Objects.requireNonNull(key, "The key must not be null");
-            return this.writableMap().remove(key);
-        }
-
-        @Override
-        public boolean remove(@NotNull K key, @NotNull V value) {
-            this.runChecks();
-
-            Objects.requireNonNull(key, "The key must not be null");
-            Objects.requireNonNull(value, "The value must not be null");
-
-            return this.writableMap().remove(key, value);
-        }
-
-        @Override
-        public boolean replace(@NotNull K key, @Nullable V oldValue, @NotNull V newValue) {
-            this.runChecks();
-
-            Objects.requireNonNull(key, "The key must not be null");
-            Objects.requireNonNull(oldValue, "The old value must not be null");
-            Objects.requireNonNull(oldValue, "The new value must not be null");
-
-            return this.writableMap().replace(key, oldValue, newValue);
-        }
-
-        @Override
-        public @Nullable V replace(@NotNull K key, @NotNull V value) {
-            this.runChecks();
-
-            Objects.requireNonNull(key, "The key must not be null");
-            Objects.requireNonNull(value, "The value must not be null");
-
-            return this.writableMap().replace(key, value);
-        }
-
-        @Override
-        public void putAll(@NotNull Map<? extends K, ? extends V> map) {
-            this.runChecks();
-            Objects.requireNonNull(map, "The map must not be null");
-            this.writableMap().putAll(map);
-        }
-
-        @Override
-        public @Nullable V putIfAbsent(@NotNull K key, @NotNull V value) {
-            this.runChecks();
-
-            Objects.requireNonNull(key, "The key must not be null");
-            Objects.requireNonNull(value, "The value must not be null");
-
-            return this.writableMap().putIfAbsent(key, value);
-        }
-
-        @Override
-        public void clear() {
-            this.runChecks();
-            this.writableMap().clear();
-        }
-
-        @Override
-        public void merge(@NotNull K key, @NotNull V value, @NotNull BiFunction<V, V, ? extends V> remappingFunction) {
-            this.runChecks();
-
-            Objects.requireNonNull(key, "The key must not be null");
-            Objects.requireNonNull(value, "The value must not be null");
-            Objects.requireNonNull(remappingFunction, "The remapping function must not be null");
-
-            this.writableMap().merge(key, value, remappingFunction);
-        }
-
-        @Override
-        public void replaceAll(@NotNull BiFunction<K, V, ? extends V> function) {
-            this.runChecks();
-            Objects.requireNonNull(function, "The function not be null");
-            this.writableMap().replaceAll(function);
-        }
-
-        @Override
-        public @Nullable V computeIfAbsent(@NotNull K key, @NotNull Function<K, ? extends V> mappingFunction) {
-            this.runChecks();
-
-            Objects.requireNonNull(key, "The key must not be null");
-            Objects.requireNonNull(mappingFunction, "The mapping function must not be null");
-
-            return this.writableMap().computeIfAbsent(key, mappingFunction);
-        }
-
-        @Override
-        public @Nullable V computeIfPresent(@NotNull K key, @NotNull BiFunction<K, V, ? extends V> remappingFunction) {
-            this.runChecks();
-
-            Objects.requireNonNull(key, "The key must not be null");
-            Objects.requireNonNull(remappingFunction, "The remapping function must not be null");
-
-            return this.writableMap().computeIfPresent(key, remappingFunction);
-        }
-
-        @Override
-        public @Nullable V compute(@NotNull K key, @NotNull BiFunction<K, V, ? extends V> remappingFunction) {
-            this.runChecks();
-
-            Objects.requireNonNull(key, "The key must not be null");
-            Objects.requireNonNull(remappingFunction, "The remapping function must not be null");
-
-            return this.writableMap().compute(key, remappingFunction);
-        }
-
-        /**
-         * Accesses and returns a map of the acquirable that owns this acquisition.
-         *
-         * <p>Note that it is unsafe to be called outside a locked thread and the acquired lock. It is up to
-         * an implementation to keep it safe.</p>
-         *
-         * @return the map
-         * @since 1.0
-         */
-        protected final @NotNull M writableMap() {
-            this.runChecks();
-            // Java for some reason needs a cast of the acquirable to access private methods and fields
-            AbstractMapAcquirable<K, V, M, AN> castAcquirable = this.acquirable;
-            return castAcquirable.map;
-        }
-    }
-
-    /**
      * Represents a common implementation of {@linkplain AbstractAcquisition an abstract acquisition}
      * and {@linkplain MapAcquisition a map acquisition}.
      *
@@ -274,11 +85,9 @@ public abstract class AbstractMapAcquirable<K, V, M extends Map<K, V>, A extends
      * @see CollectionAcquisition
      * @see AbstractAcquisition
      */
-    private static abstract class AbstractMapAcquisition
-            <K, V, M extends Map<K, V>,
-                    AN extends MapAcquisition<K, V, M>,
-                    AE extends AbstractMapAcquirable<K, V, M, AN>>
-            extends AbstractAcquisition<AN, AE> implements MapAcquisition<K, V, M> {
+    protected static abstract class AbstractMapAcquisition
+            <K, V, M extends Map<K, V>, AN extends MapAcquisition<K, V>, AE extends AbstractMapAcquirable<K, V, M, AN>>
+            extends AbstractAcquisition<AN, AE> implements MapAcquisition<K, V> {
         /**
          * Constructs the {@linkplain AbstractMapAcquisition abstract map acquisition}.
          *
@@ -287,121 +96,150 @@ public abstract class AbstractMapAcquirable<K, V, M extends Map<K, V>, A extends
          * @since 1.0
          */
         protected AbstractMapAcquisition(@NotNull AE acquirable, @NotNull AcquisitionType type) {
-            // There is no need to do nullability checks, the superclass will do that for us
             super(acquirable, type);
         }
 
         @Override
-        public final @NotNull M map() {
-            this.runChecks();
-            // Java for some reason needs a cast of the acquirable to access private methods and fields
-            AbstractMapAcquirable<K, V, M, AN> castAcquirable = this.acquirable;
-            return castAcquirable.readOnlyView;
-        }
-    }
-
-    /**
-     * Represents {@linkplain ReusedMapAcquisition a reused map acquisition}, which reused an already
-     * existing {@linkplain WriteMapAcquisition write map acquisition}.
-     *
-     * @param <K> a type of key of the following map
-     * @param <V> a type of value of the following map
-     * @param <M> a type of the map of the map acquisition that is being reused
-     * @since 1.0
-     * @see WriteMapAcquisition
-     * @see ReusedMapAcquisition
-     */
-    protected static class ReusedWriteMapAcquisition<K, V, M extends Map<K, V>>
-            extends ReusedMapAcquisition<K, V, M, WriteMapAcquisition<K, V, M>>
-            implements WriteMapAcquisition<K, V, M> {
-        /**
-         * Constructs the {@linkplain ReusedWriteMapAcquisition reused write map acquisition}.
-         *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
-         * @since 1.0
-         */
-        protected ReusedWriteMapAcquisition(@NotNull WriteMapAcquisition<K, V, M> originalAcquisition) {
-            // There is no need to do nullability checks, the superclass will do that for us
-            super(originalAcquisition);
+        public final int size() {
+            return this.map().size();
         }
 
         @Override
-        public final @Nullable V put(@NotNull K key, @NotNull V value) {
-            // There is no need for a nullability check, the method will do that for us
-            return this.originalAcquisition.put(key, value);
+        public final boolean isEmpty() {
+            return this.map().isEmpty();
         }
 
         @Override
-        public final @Nullable V remove(@NotNull K key) {
-            // There is no need for a nullability check, the method will do that for us
-            return this.originalAcquisition.remove(key);
+        public final boolean containsKey(Object key) {
+            return this.map().containsKey(key);
         }
 
         @Override
-        public final boolean remove(@NotNull K key, @NotNull V value) {
-            // There is no need for a nullability check, the method will do that for us
-            return this.originalAcquisition.remove(key, value);
+        public final boolean containsValue(Object value) {
+            return this.map().containsValue(value);
         }
 
         @Override
-        public final boolean replace(@NotNull K key, @Nullable V oldValue, @NotNull V newValue) {
-            // There is no need for a nullability check, the method will do that for us
-            return this.originalAcquisition.replace(key, oldValue, newValue);
+        public final V get(Object key) {
+            return this.map().get(key);
         }
 
         @Override
-        public final @Nullable V replace(@NotNull K key, @NotNull V value) {
-            // There is no need for a nullability check, the method will do that for us
-            return this.originalAcquisition.replace(key, value);
+        public final @Nullable V put(K key, V value) {
+            return this.map().put(key, value);
         }
 
         @Override
-        public final void putAll(@NotNull Map<? extends K, ? extends V> map) {
-            // There is no need for a nullability check, the method will do that for us
-            this.originalAcquisition.putAll(map);
+        public final V remove(Object key) {
+            return this.map().remove(key);
         }
 
         @Override
-        public final @Nullable V putIfAbsent(@NotNull K key, @NotNull V value) {
-            // There is no need for a nullability check, the method will do that for us
-            return this.originalAcquisition.putIfAbsent(key, value);
+        public final void putAll(@NotNull Map<? extends K, ? extends V> m) {
+            this.map().putAll(Objects.requireNonNull(m, "The map must not be null"));
         }
 
         @Override
         public final void clear() {
-            this.originalAcquisition.clear();
+            this.map().clear();
         }
 
         @Override
-        public final void merge(@NotNull K key, @NotNull V value,
-                                @NotNull BiFunction<V, V, ? extends V> remappingFunction) {
-            // There is no need for a nullability check, the method will do that for us
-            this.originalAcquisition.merge(key, value, remappingFunction);
+        public final @NotNull Set<K> keySet() {
+            return new GuardedSet<>(this.map().keySet(), this);
         }
 
         @Override
-        public final void replaceAll(@NotNull BiFunction<K, V, ? extends V> function) {
-            // There is no need for a nullability check, the method will do that for us
-            this.originalAcquisition.replaceAll(function);
+        public final @NotNull Collection<V> values() {
+            return new GuardedCollection<>(this.map().values(), this);
         }
 
         @Override
-        public final @Nullable V computeIfAbsent(@NotNull K key, @NotNull Function<K, ? extends V> mappingFunction) {
-            // There is no need for a nullability check, the method will do that for us
-            return this.originalAcquisition.computeIfAbsent(key, mappingFunction);
+        public final @NotNull Set<Entry<K, V>> entrySet() {
+            return new GuardedSet<>(this.map().entrySet(), this);
         }
 
         @Override
-        public final @Nullable V computeIfPresent(@NotNull K key,
-                                                  @NotNull BiFunction<K, V, ? extends V> remappingFunction) {
-            // There is no need for a nullability check, the method will do that for us
-            return this.originalAcquisition.computeIfPresent(key, remappingFunction);
+        public final V getOrDefault(Object key, V defaultValue) {
+            return this.map().getOrDefault(key, defaultValue);
         }
 
         @Override
-        public final @Nullable V compute(@NotNull K key, @NotNull BiFunction<K, V, ? extends V> remappingFunction) {
-            // There is no need for a nullability check, the method will do that for us
-            return this.originalAcquisition.compute(key, remappingFunction);
+        public final void forEach(BiConsumer<? super K, ? super V> action) {
+            this.map().forEach(action);
+        }
+
+        @Override
+        public final void replaceAll(BiFunction<? super K, ? super V, ? extends V> function) {
+            this.map().replaceAll(function);
+        }
+
+        @Override
+        public final @Nullable V putIfAbsent(K key, V value) {
+            return this.map().putIfAbsent(key, value);
+        }
+
+        @Override
+        public final boolean remove(Object key, Object value) {
+            return this.map().remove(key, value);
+        }
+
+        @Override
+        public final boolean replace(K key, V oldValue, V newValue) {
+            return this.map().replace(key, oldValue, newValue);
+        }
+
+        @Override
+        public final @Nullable V replace(K key, V value) {
+            return this.map().replace(key, value);
+        }
+
+        @Override
+        public final V computeIfAbsent(K key, @NotNull Function<? super K, ? extends V> mappingFunction) {
+            Objects.requireNonNull(mappingFunction, "The mapping function must not be null");
+            return this.map().computeIfAbsent(key, mappingFunction);
+        }
+
+        @Override
+        public final V computeIfPresent(K key,
+                                        @NotNull BiFunction<? super K, ? super V, ? extends V> remappingFunction) {
+            Objects.requireNonNull(remappingFunction, "The remapping function must not be null");
+            return this.map().computeIfPresent(key, remappingFunction);
+        }
+
+        @Override
+        public final V compute(K key,
+                               @NotNull BiFunction<? super K, ? super @Nullable V, ? extends V> remappingFunction) {
+            Objects.requireNonNull(remappingFunction, "The remapping function must not be null");
+            return this.map().compute(key, remappingFunction);
+        }
+
+        @Override
+        public final V merge(K key, @NotNull V value,
+                             @NotNull BiFunction<? super V, ? super V, ? extends V> remappingFunction) {
+            Objects.requireNonNull(value, "The value must not be null");
+            Objects.requireNonNull(remappingFunction, "The remapping function must not be null");
+            return this.map().merge(key, value, remappingFunction);
+        }
+
+        /**
+         * Accesses and returns a view - read-only or normal, depending on the acquisition - of a map of the acquirable
+         * that owns this acquisition.
+         *
+         * <p>Note that the map should be used only for the acquisition implementation purposes. It must not be used
+         * anywhere else.</p>
+         *
+         * @return the view of the map
+         * @since 1.0
+         */
+        protected final @NotNull M map() {
+            this.ensurePermittedAndLocked();
+            // Java requires a cast here for some reason
+            AbstractMapAcquirable<K, V, M, AN> castAcquirable = acquirable;
+            return switch (this.acquisitionType()) {
+                case READ -> castAcquirable.readOnlyView;
+                case WRITE -> castAcquirable.map;
+            };
         }
     }
 
@@ -411,14 +249,13 @@ public abstract class AbstractMapAcquirable<K, V, M extends Map<K, V>, A extends
      *
      * @param <K> a type of key of the following map
      * @param <V> a type of value of the following map
-     * @param <M> a type of the map of the map acquisition that is being reused
      * @param <A> a type of the acquisition that is being reused
      * @since 1.0
      * @see MapAcquisition
      * @see ReusedAcquisition
      */
-    protected static class ReusedMapAcquisition<K, V, M extends Map<K, V>, A extends MapAcquisition<K, V, M>>
-            extends ReusedAcquisition<A> implements MapAcquisition<K, V, M> {
+    protected static class ReusedMapAcquisition<K, V, A extends MapAcquisition<K, V>> extends ReusedAcquisition<A>
+            implements MapAcquisition<K, V> {
         /**
          * Constructs the {@linkplain ReusedMapAcquisition reused map acquisition}.
          *
@@ -431,8 +268,121 @@ public abstract class AbstractMapAcquirable<K, V, M extends Map<K, V>, A extends
         }
 
         @Override
-        public final @NotNull M map() {
-            return this.originalAcquisition.map();
+        public final int size() {
+            return this.originalAcquisition.size();
+        }
+
+        @Override
+        public final boolean isEmpty() {
+            return this.originalAcquisition.isEmpty();
+        }
+
+        @Override
+        public final boolean containsKey(Object key) {
+            return this.originalAcquisition.containsKey(key);
+        }
+
+        @Override
+        public final boolean containsValue(Object value) {
+            return this.originalAcquisition.containsValue(value);
+        }
+
+        @Override
+        public final V get(Object key) {
+            return this.originalAcquisition.get(key);
+        }
+
+        @Override
+        public final @Nullable V put(K key, V value) {
+            return this.originalAcquisition.put(key, value);
+        }
+
+        @Override
+        public final V remove(Object key) {
+            return this.originalAcquisition.remove(key);
+        }
+
+        @Override
+        public final void putAll(@NotNull Map<? extends K, ? extends V> m) {
+            this.originalAcquisition.putAll(m);
+        }
+
+        @Override
+        public final void clear() {
+            this.originalAcquisition.clear();
+        }
+
+        @Override
+        public final @NotNull Set<K> keySet() {
+            return this.originalAcquisition.keySet();
+        }
+
+        @Override
+        public final @NotNull Collection<V> values() {
+            return this.originalAcquisition.values();
+        }
+
+        @Override
+        public final @NotNull Set<Entry<K, V>> entrySet() {
+            return this.originalAcquisition.entrySet();
+        }
+
+        @Override
+        public final V getOrDefault(Object key, V defaultValue) {
+            return this.originalAcquisition.getOrDefault(key, defaultValue);
+        }
+
+        @Override
+        public final void forEach(BiConsumer<? super K, ? super V> action) {
+            this.originalAcquisition.forEach(action);
+        }
+
+        @Override
+        public final void replaceAll(BiFunction<? super K, ? super V, ? extends V> function) {
+            this.originalAcquisition.replaceAll(function);
+        }
+
+        @Override
+        public final @Nullable V putIfAbsent(K key, V value) {
+            return this.originalAcquisition.putIfAbsent(key, value);
+        }
+
+        @Override
+        public final boolean remove(Object key, Object value) {
+            return this.originalAcquisition.remove(key, value);
+        }
+
+        @Override
+        public final boolean replace(K key, V oldValue, V newValue) {
+            return this.originalAcquisition.replace(key, oldValue, newValue);
+        }
+
+        @Override
+        public final @Nullable V replace(K key, V value) {
+            return this.originalAcquisition.replace(key, value);
+        }
+
+        @Override
+        public final V computeIfAbsent(K key, @NotNull Function<? super K, ? extends V> mappingFunction) {
+            return this.originalAcquisition.computeIfAbsent(key, mappingFunction);
+        }
+
+        @Override
+        public final V computeIfPresent(K key,
+                                        @NotNull BiFunction<? super K, ? super V, ? extends V> remappingFunction) {
+            return this.originalAcquisition.computeIfPresent(key, remappingFunction);
+        }
+
+        @Override
+        public final V compute(K key,
+                               @NotNull BiFunction<? super K, ? super @Nullable V, ? extends V> remappingFunction) {
+            return this.originalAcquisition.computeIfPresent(key, remappingFunction);
+        }
+
+        @Override
+        public final V merge(K key, @NotNull V value,
+                             @NotNull BiFunction<? super V, ? super V, ? extends V> remappingFunction) {
+            return this.originalAcquisition.merge(key, value, remappingFunction);
         }
     }
 }

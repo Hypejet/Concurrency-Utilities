@@ -119,7 +119,7 @@ public final class ObjectAcquirable<O> extends Acquirable<ObjectAcquisition<O>> 
 
         @Override
         public void set(@NotNull V value) {
-            this.runChecks();
+            this.ensurePermittedAndLocked();
             this.acquirable.value = Objects.requireNonNull(value, "The value must not be null");
         }
     }
@@ -150,7 +150,7 @@ public final class ObjectAcquirable<O> extends Acquirable<ObjectAcquisition<O>> 
 
         @Override
         public final @NotNull O get() {
-            this.runChecks();
+            this.ensurePermittedAndLocked();
             return this.acquirable.value;
         }
 

@@ -123,7 +123,7 @@ public final class BooleanAcquirable extends Acquirable<BooleanAcquisition> {
 
         @Override
         public void set(boolean value) {
-            this.runChecks();
+            this.ensurePermittedAndLocked();
             this.acquirable.value = value;
         }
     }
@@ -152,7 +152,7 @@ public final class BooleanAcquirable extends Acquirable<BooleanAcquisition> {
 
         @Override
         public final boolean get() {
-            this.runChecks();
+            this.ensurePermittedAndLocked();
             return this.acquirable.value;
         }
 

@@ -123,7 +123,7 @@ public final class DoubleAcquirable extends Acquirable<DoubleAcquisition> {
 
         @Override
         public void set(double value) {
-            this.runChecks();
+            this.ensurePermittedAndLocked();
             this.acquirable.value = value;
         }
     }
@@ -153,7 +153,7 @@ public final class DoubleAcquirable extends Acquirable<DoubleAcquisition> {
 
         @Override
         public final double get() {
-            this.runChecks();
+            this.ensurePermittedAndLocked();
             return this.acquirable.value;
         }
 

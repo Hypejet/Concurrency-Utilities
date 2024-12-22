@@ -123,7 +123,7 @@ public final class LongAcquirable extends Acquirable<LongAcquisition> {
 
         @Override
         public void set(long value) {
-            this.runChecks();
+            this.ensurePermittedAndLocked();
             this.acquirable.value = value;
         }
     }
@@ -152,7 +152,7 @@ public final class LongAcquirable extends Acquirable<LongAcquisition> {
 
         @Override
         public final long get() {
-            this.runChecks();
+            this.ensurePermittedAndLocked();
             return this.acquirable.value;
         }
 

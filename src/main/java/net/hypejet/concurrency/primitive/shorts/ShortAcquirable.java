@@ -123,7 +123,7 @@ public final class ShortAcquirable extends Acquirable<ShortAcquisition> {
 
         @Override
         public void set(short value) {
-            this.runChecks();
+            this.ensurePermittedAndLocked();
             this.acquirable.value = value;
         }
     }
@@ -152,7 +152,7 @@ public final class ShortAcquirable extends Acquirable<ShortAcquisition> {
 
         @Override
         public final short get() {
-            this.runChecks();
+            this.ensurePermittedAndLocked();
             return this.acquirable.value;
         }
 

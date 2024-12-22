@@ -113,7 +113,7 @@ public final class CharacterAcquirable extends Acquirable<CharacterAcquisition> 
 
         @Override
         public void set(char value) {
-            this.runChecks();
+            this.ensurePermittedAndLocked();
             this.acquirable.value = value;
         }
     }
@@ -143,7 +143,7 @@ public final class CharacterAcquirable extends Acquirable<CharacterAcquisition> 
 
         @Override
         public final char get() {
-            this.runChecks();
+            this.ensurePermittedAndLocked();
             return this.acquirable.value;
         }
 

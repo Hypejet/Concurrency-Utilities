@@ -123,7 +123,7 @@ public final class ByteAcquirable extends Acquirable<ByteAcquisition> {
 
         @Override
         public void set(byte value) {
-            this.runChecks();
+            this.ensurePermittedAndLocked();
             this.acquirable.value = value;
         }
     }
@@ -153,7 +153,7 @@ public final class ByteAcquirable extends Acquirable<ByteAcquisition> {
 
         @Override
         public final byte get() {
-            this.runChecks();
+            this.ensurePermittedAndLocked();
             return this.acquirable.value;
         }
 

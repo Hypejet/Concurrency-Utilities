@@ -157,48 +157,48 @@ public abstract class CollectionAcquirable<V, C extends Collection<V>>
 
         @Override
         public boolean add(@NotNull V value) {
-            this.runChecks();
+            this.ensurePermittedAndLocked();
             Objects.requireNonNull(value, "The value must not be null");
             return this.acquirable.collection.add(value);
         }
 
         @Override
         public boolean remove(@NotNull V value) {
-            this.runChecks();
+            this.ensurePermittedAndLocked();
             Objects.requireNonNull(value, "The value must not be null");
             return this.acquirable.collection.remove(value);
         }
 
         @Override
         public boolean addAll(@NotNull Collection<? extends V> collection) {
-            this.runChecks();
+            this.ensurePermittedAndLocked();
             Objects.requireNonNull(collection, "The collection must not be null");
             return this.acquirable.collection.addAll(collection);
         }
 
         @Override
         public boolean removeAll(@NotNull Collection<? extends V> collection) {
-            this.runChecks();
+            this.ensurePermittedAndLocked();
             Objects.requireNonNull(collection, "The collection must not be null");
             return this.acquirable.collection.removeAll(collection);
         }
 
         @Override
         public boolean removeIf(@NotNull Predicate<? super V> predicate) {
-            this.runChecks();
+            this.ensurePermittedAndLocked();
             Objects.requireNonNull(predicate, "The predicate must not be null");
             return this.acquirable.collection.removeIf(predicate);
         }
 
         @Override
         public void clear() {
-            this.runChecks();
+            this.ensurePermittedAndLocked();
             this.acquirable.collection.clear();
         }
 
         @Override
         public boolean retainAll(@NotNull Collection<? extends V> collection) {
-            this.runChecks();
+            this.ensurePermittedAndLocked();
             Objects.requireNonNull(collection, "The collection must not be null");
             return this.acquirable.collection.retainAll(collection);
         }
@@ -232,7 +232,7 @@ public abstract class CollectionAcquirable<V, C extends Collection<V>>
 
         @Override
         public final @NotNull C collection() {
-            this.runChecks();
+            this.ensurePermittedAndLocked();
             return this.acquirable.readOnlyView;
         }
 

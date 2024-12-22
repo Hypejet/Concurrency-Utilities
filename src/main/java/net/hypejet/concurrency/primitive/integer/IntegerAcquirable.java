@@ -123,7 +123,7 @@ public final class IntegerAcquirable extends Acquirable<IntegerAcquisition> {
 
         @Override
         public void set(int value) {
-            this.runChecks();
+            this.ensurePermittedAndLocked();
             this.acquirable.value = value;
         }
     }
@@ -152,7 +152,7 @@ public final class IntegerAcquirable extends Acquirable<IntegerAcquisition> {
 
         @Override
         public final int get() {
-            this.runChecks();
+            this.ensurePermittedAndLocked();
             return this.acquirable.value;
         }
 
