@@ -1,4 +1,4 @@
-package net.hypejet.concurrency.util.iterator;
+package net.hypejet.concurrency.util.spliterator;
 
 import net.hypejet.concurrency.Acquisition;
 import org.jetbrains.annotations.NotNull;
@@ -14,72 +14,73 @@ import java.util.function.Consumer;
  * operation.
  *
  * @param <T> a type of entries of the spliterator
+ * @param <S> a type of the guarded spliterator
  * @since 1.0
  * @see Acquisition
  * @see Spliterator
  */
-public final class GuardedSpliterator<T> implements Spliterator<T> {
+public class GuardedSpliterator<T, S extends Spliterator<T>> implements Spliterator<T> {
 
-    private final Spliterator<T> spliterator;
-    private final Acquisition acquisition;
+    protected final S delegate;
+    protected final Acquisition acquisition;
 
     /**
      * Constructs the {@linkplain GuardedSpliterator guarded spliterator}.
      *
-     * @param spliterator the spliterator that should be wrapped
+     * @param delegate the spliterator that should be wrapped
      * @param acquisition an acquisition that should guard the spliterator
      * @since 1.0
      */
-    public GuardedSpliterator(@NotNull Spliterator<T> spliterator, @NotNull Acquisition acquisition) {
-        this.spliterator = Objects.requireNonNull(spliterator, "The spliterator must not be null");
+    public GuardedSpliterator(@NotNull S delegate, @NotNull Acquisition acquisition) {
+        this.delegate = Objects.requireNonNull(delegate, "The delegate must not be null");
         this.acquisition = Objects.requireNonNull(acquisition, "The acquisition must not be null");
     }
 
     @Override
-    public boolean tryAdvance(Consumer<? super T> action) {
+    public final boolean tryAdvance(Consumer<? super T> action) {
         this.acquisition.ensurePermittedAndLocked();
-        return this.spliterator.tryAdvance(action);
+        return this.delegate.tryAdvance(action);
     }
 
     @Override
-    public void forEachRemaining(Consumer<? super T> action) {
+    public final void forEachRemaining(Consumer<? super T> action) {
         this.acquisition.ensurePermittedAndLocked();
-        this.spliterator.forEachRemaining(action);
+        this.delegate.forEachRemaining(action);
     }
 
     @Override
-    public Spliterator<T> trySplit() {
+    public final Spliterator<T> trySplit() {
         this.acquisition.ensurePermittedAndLocked();
-        return this.spliterator.trySplit();
+        return this.delegate.trySplit();
     }
 
     @Override
-    public long estimateSize() {
+    public final long estimateSize() {
         this.acquisition.ensurePermittedAndLocked();
-        return this.spliterator.estimateSize();
+        return this.delegate.estimateSize();
     }
 
     @Override
-    public long getExactSizeIfKnown() {
+    public final long getExactSizeIfKnown() {
         this.acquisition.ensurePermittedAndLocked();
-        return this.spliterator.getExactSizeIfKnown();
+        return this.delegate.getExactSizeIfKnown();
     }
 
     @Override
-    public int characteristics() {
+    public final int characteristics() {
         this.acquisition.ensurePermittedAndLocked();
-        return this.spliterator.characteristics();
+        return this.delegate.characteristics();
     }
 
     @Override
-    public boolean hasCharacteristics(int characteristics) {
+    public final boolean hasCharacteristics(int characteristics) {
         this.acquisition.ensurePermittedAndLocked();
-        return this.spliterator.hasCharacteristics(characteristics);
+        return this.delegate.hasCharacteristics(characteristics);
     }
 
     @Override
-    public Comparator<? super T> getComparator() {
+    public final Comparator<? super T> getComparator() {
         this.acquisition.ensurePermittedAndLocked();
-        return this.spliterator.getComparator();
+        return this.delegate.getComparator();
     }
 }

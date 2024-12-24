@@ -12,48 +12,49 @@ import java.util.function.Consumer;
  * is locked and a caller thread has a permission to it during doing any operation.
  *
  * @param <E> a type of entries of the iterator
+ * @param <I> a type of the guarded iterator
  * @since 1.0
  * @see Acquisition
  * @see Iterator
  */
-public final class GuardedIterator<E> implements Iterator<E> {
+public class GuardedIterator<E, I extends Iterator<E>> implements Iterator<E> {
 
-    private final Iterator<E> iterator;
-    private final Acquisition acquisition;
+    protected final I delegate;
+    protected final Acquisition acquisition;
 
     /**
      * Constructs the {@linkplain GuardedIterator guarded iterator}.
      *
-     * @param iterator the iterator that should be wrapped
+     * @param delegate the iterator that should be wrapped
      * @param acquisition an acquisition that should guard the iterator
      * @since 1.0
      */
-    public GuardedIterator(@NotNull Iterator<E> iterator, @NotNull Acquisition acquisition) {
-        this.iterator = Objects.requireNonNull(iterator, "The iterator must not be null");
+    public GuardedIterator(@NotNull I delegate, @NotNull Acquisition acquisition) {
+        this.delegate = Objects.requireNonNull(delegate, "The delegate must not be null");
         this.acquisition = Objects.requireNonNull(acquisition, "The acquisition must not be null");
     }
 
     @Override
-    public boolean hasNext() {
+    public final boolean hasNext() {
         this.acquisition.ensurePermittedAndLocked();
-        return this.iterator.hasNext();
+        return this.delegate.hasNext();
     }
 
     @Override
-    public E next() {
+    public final E next() {
         this.acquisition.ensurePermittedAndLocked();
-        return this.iterator.next();
+        return this.delegate.next();
     }
 
     @Override
-    public void remove() {
+    public final void remove() {
         this.acquisition.ensurePermittedAndLocked();
-        this.iterator.remove();
+        this.delegate.remove();
     }
 
     @Override
-    public void forEachRemaining(Consumer<? super E> action) {
+    public final void forEachRemaining(Consumer<? super E> action) {
         this.acquisition.ensurePermittedAndLocked();
-        this.iterator.forEachRemaining(action);
+        this.delegate.forEachRemaining(action);
     }
 }

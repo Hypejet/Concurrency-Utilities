@@ -1,4 +1,4 @@
-package net.hypejet.concurrency.util.collection;
+package net.hypejet.concurrency.util.iterable.collection;
 
 import net.hypejet.concurrency.Acquisition;
 import org.jetbrains.annotations.NotNull;
@@ -14,15 +14,15 @@ import java.util.Set;
  * @see Acquisition
  * @see Set
  */
-public final class GuardedSet<E> extends GuardedCollection<E, Set<E>> implements Set<E> {
+public class GuardedSet<E> extends GuardedCollection<E, Set<E>> implements Set<E> {
     /**
      * Constructs the {@linkplain GuardedSet guarded set}.
      *
-     * @param set the set that should be wrapped
+     * @param delegate the set that should be wrapped
      * @param acquisition an acquisition that should guard the set
      * @since 1.0
      */
-    public GuardedSet(@NotNull Set<E> set, @NotNull Acquisition acquisition) {
-        super(set, acquisition);
+    public GuardedSet(@NotNull Set<E> delegate, @NotNull Acquisition acquisition) {
+        super(delegate, acquisition);
     }
 }

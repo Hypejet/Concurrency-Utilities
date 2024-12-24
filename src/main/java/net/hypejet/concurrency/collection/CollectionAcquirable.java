@@ -1,29 +1,30 @@
 package net.hypejet.concurrency.collection;
 
 import net.hypejet.concurrency.Acquirable;
+import net.hypejet.concurrency.Acquisition;
+import net.hypejet.concurrency.util.iterable.collection.GuardedCollection;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collection;
-import java.util.Objects;
-import java.util.function.Predicate;
 
 /**
  * Represents {@linkplain Acquirable an acquirable}, which guards {@linkplain Collection a collection}.
  *
- * @param <V> a type of value of the collection
+ * @param <E> a type of elements of the collection
  * @param <C> a type of the collection
  * @since 1.0
  * @see Acquirable
  */
-public abstract class CollectionAcquirable<V, C extends Collection<V>>
-        extends Acquirable<CollectionAcquisition<V, C>> {
+public abstract class CollectionAcquirable<E, C extends Collection<E>>
+        extends Acquirable<CollectionAcquisition<E, C>> {
 
     private final @NotNull C collection;
     private final @NotNull C readOnlyView;
 
     /**
-     * Constructs the {@linkplain CollectionAcquirable collection acquirable} with no initial elements.
+     * Constructs the {@linkplain CollectionAcquirable collection acquirable} with no initial
+     * elements.
      *
      * @since 1.0
      */
@@ -37,15 +38,13 @@ public abstract class CollectionAcquirable<V, C extends Collection<V>>
      * @param initialElements a collection of elements that should be added to the collection during initialization
      * @since 1.0
      */
-    public CollectionAcquirable(@Nullable Collection<V> initialElements) {
-        this.collection = this.createCollection();
-        if (initialElements != null)
-            this.collection.addAll(initialElements);
+    public CollectionAcquirable(@Nullable Collection<E> initialElements) {
+        this.collection = this.createCollection(initialElements);
         this.readOnlyView = this.createReadOnlyView(this.collection);
     }
 
     /**
-     * Creates {@linkplain CollectionAcquisition a collection acquisition} of a collection held by this
+     * Creates {@linkplain CollectionAcquisition a collection acquisition} of this
      * {@linkplain CollectionAcquirable collection acquirable} that supports read-only operations.
      *
      * <p>If the caller thread has already created an acquisition a special implementation is used, which reuses it,
@@ -58,15 +57,15 @@ public abstract class CollectionAcquirable<V, C extends Collection<V>>
      * @since 1.0
      */
     @Override
-    public final @NotNull CollectionAcquisition<V, C> acquireRead() {
-        CollectionAcquisition<V, C> foundAcquisition = this.findAcquisition();
+    public final @NotNull CollectionAcquisition<E, C> acquireRead() {
+        CollectionAcquisition<E, C> foundAcquisition = this.findAcquisition();
         if (foundAcquisition != null)
             return new ReusedCollectionAcquisition<>(foundAcquisition);
-        return new CollectionAcquisitionImpl<>(this);
+        return new CollectionAcquisitionImpl<>(this, Acquisition.AcquisitionType.READ);
     }
 
     /**
-     * Creates {@linkplain WriteCollectionAcquisition a write empty acquisition} of this
+     * Creates {@linkplain CollectionAcquisition a collection acquisition} of this
      * {@linkplain CollectionAcquirable collection acquirable} that supports write operations.
      *
      * <p>If the caller thread has already created a write acquisition a special implementation is used, which
@@ -81,25 +80,27 @@ public abstract class CollectionAcquirable<V, C extends Collection<V>>
      *                                  acquisition
      */
     @Override
-    public final @NotNull WriteCollectionAcquisition<V, C> acquireWrite() {
-        CollectionAcquisition<V, C> foundAcquisition = this.findAcquisition();
+    public final @NotNull CollectionAcquisition<E, C> acquireWrite() {
+        CollectionAcquisition<E, C> foundAcquisition = this.findAcquisition();
         if (foundAcquisition == null)
-            return new WriteCollectionAcquisitionImpl<>(this);
+            return new CollectionAcquisitionImpl<>(this, Acquisition.AcquisitionType.WRITE);
 
-        if (!(foundAcquisition instanceof WriteCollectionAcquisition<V, C> writeAcquisition)) {
+        if (foundAcquisition.acquisitionType() != Acquisition.AcquisitionType.WRITE) {
             throw new IllegalArgumentException("The caller thread has already created an acquisition," +
                     " but it is not a write acquisition");
         }
-        return new ReusedWriteCollectionAcquisition<>(writeAcquisition);
+        return new ReusedCollectionAcquisition<>(foundAcquisition);
     }
 
     /**
      * Creates a new mutable instance of the collection.
      *
+     * @param initialElements a collection of elements that should be added to the collection during initialization,
+     *                        {@code null} if none
      * @return the created instance
      * @since 1.0
      */
-    protected abstract @NotNull C createCollection();
+    protected abstract @NotNull C createCollection(@Nullable Collection<E> initialElements);
 
     /**
      * Creates a new read-only view of a collection specified.
@@ -111,200 +112,63 @@ public abstract class CollectionAcquirable<V, C extends Collection<V>>
     protected abstract @NotNull C createReadOnlyView(@NotNull C collection);
 
     /**
-     * Represents an implementation of {@linkplain AbstractCollectionAcquisition an abstract collection acquisition}.
+     * Creates a new view of a collection, which is guarded by an acquisition specified. This means that the collection
+     * returned should do checks using the acquisition specified with {@link Acquisition#ensurePermittedAndLocked()}.
      *
-     * @param <V> a type of value of the held collection
-     * @param <C> a type of the held collection
+     * <p>{@link GuardedCollection} is recommended as an implementation of the guarded collection.</p>
+     *
+     * @param collection a view of the collection - read-only or normal, depending on the acquisition - to create the
+     *                   guarded view with
+     * @param acquisition an acquisition that guards the collection
+     * @return the guarded view
      * @since 1.0
-     * @see AbstractCollectionAcquisition
      */
-    private static final class CollectionAcquisitionImpl<V, C extends Collection<V>>
-            extends AbstractCollectionAcquisition<V, C> {
-        /**
-         * Constructs the {@linkplain AbstractAcquisition abstract acquisition}.
-         *
-         * @param acquirable an acquirable whose state is guarded by the lock
-         * @since 1.0
-         */
-        private CollectionAcquisitionImpl(@NotNull CollectionAcquirable<V, C> acquirable) {
-            // There is no need to do nullability checks, the superclass will do that for us
-            super(acquirable, AcquisitionType.READ);
-        }
-    }
+    protected abstract @NotNull C createGuardedView(@NotNull C collection,
+                                                    @NotNull CollectionAcquisition<E, C> acquisition);
 
     /**
-     * Represents an implementation of {@linkplain AbstractCollectionAcquisition an abstract collection acquisition}
-     * and {@linkplain WriteCollectionAcquisition a write collection acquisition}.
+     * Represents an implementation of {@linkplain AbstractAcquisition an abstract acquisition} and
+     * {@linkplain CollectionAcquisition a collection acquisition}.
      *
-     * @param <V> a type of value of the held collection
+     * @param <E> a type of elements of the held collection
      * @param <C> a type of the held collection
-     * @since 1.0
-     * @see WriteCollectionAcquisition
-     * @see AbstractCollectionAcquisition
-     */
-    private static final class WriteCollectionAcquisitionImpl<V, C extends Collection<V>>
-            extends AbstractCollectionAcquisition<V, C> implements WriteCollectionAcquisition<V, C> {
-        /**
-         * Constructs the {@linkplain WriteCollectionAcquisitionImpl write collection acquisition implementation}.
-         *
-         * @param acquirable an acquirable whose state is guarded by the lock
-         * @since 1.0
-         */
-        private WriteCollectionAcquisitionImpl(@NotNull CollectionAcquirable<V, C> acquirable) {
-            // There is no need to do nullability checks, the superclass will do that for us
-            super(acquirable, AcquisitionType.WRITE);
-        }
-
-        @Override
-        public boolean add(@NotNull V value) {
-            this.ensurePermittedAndLocked();
-            Objects.requireNonNull(value, "The value must not be null");
-            return this.acquirable.collection.add(value);
-        }
-
-        @Override
-        public boolean remove(@NotNull V value) {
-            this.ensurePermittedAndLocked();
-            Objects.requireNonNull(value, "The value must not be null");
-            return this.acquirable.collection.remove(value);
-        }
-
-        @Override
-        public boolean addAll(@NotNull Collection<? extends V> collection) {
-            this.ensurePermittedAndLocked();
-            Objects.requireNonNull(collection, "The collection must not be null");
-            return this.acquirable.collection.addAll(collection);
-        }
-
-        @Override
-        public boolean removeAll(@NotNull Collection<? extends V> collection) {
-            this.ensurePermittedAndLocked();
-            Objects.requireNonNull(collection, "The collection must not be null");
-            return this.acquirable.collection.removeAll(collection);
-        }
-
-        @Override
-        public boolean removeIf(@NotNull Predicate<? super V> predicate) {
-            this.ensurePermittedAndLocked();
-            Objects.requireNonNull(predicate, "The predicate must not be null");
-            return this.acquirable.collection.removeIf(predicate);
-        }
-
-        @Override
-        public void clear() {
-            this.ensurePermittedAndLocked();
-            this.acquirable.collection.clear();
-        }
-
-        @Override
-        public boolean retainAll(@NotNull Collection<? extends V> collection) {
-            this.ensurePermittedAndLocked();
-            Objects.requireNonNull(collection, "The collection must not be null");
-            return this.acquirable.collection.retainAll(collection);
-        }
-    }
-
-    /**
-     * Represents a common implementation of {@linkplain AbstractAcquisition an abstract acquisition}
-     * and {@linkplain CollectionAcquisition a collection acquisition}.
-     *
-     * @param <V> a type of value of the held collection
-     * @param <C> a type of the held collection
+     * @param <AE> a type of acquirable that the collection acquisition should be registered in
      * @since 1.0
      * @see CollectionAcquisition
      * @see AbstractAcquisition
      */
-    private static abstract class AbstractCollectionAcquisition<V, C extends Collection<V>>
-            extends AbstractAcquisition<CollectionAcquisition<V, C>, CollectionAcquirable<V, C>>
-            implements CollectionAcquisition<V, C> {
+    private static final class CollectionAcquisitionImpl
+            <E, C extends Collection<E>, AE extends CollectionAcquirable<E, C>>
+            extends AbstractAcquisition<CollectionAcquisition<E, C>, AE> implements CollectionAcquisition<E, C> {
+
+        private final C guardedView;
+
         /**
-         * Constructs the {@linkplain AbstractCollectionAcquisition abstract collection acquisition}.
+         * Constructs the {@linkplain CollectionAcquisitionImpl collection acquisition}.
          *
          * @param acquirable an acquirable whose collection is guarded by the lock
          * @param type a type, of which the acquisition should be
          * @since 1.0
          */
-        protected AbstractCollectionAcquisition(@NotNull CollectionAcquirable<V, C> acquirable,
-                                                @NotNull AcquisitionType type) {
-            // There is no need to do nullability checks, the superclass will do that for us
+        private CollectionAcquisitionImpl(@NotNull AE acquirable, @NotNull AcquisitionType type) {
             super(acquirable, type);
+
+            // Java requires a cast here for some reason
+            CollectionAcquirable<E, C> castAcquirable = acquirable;
+            this.guardedView = acquirable.createGuardedView(switch (this.acquisitionType()) {
+                case READ -> castAcquirable.readOnlyView;
+                case WRITE -> castAcquirable.collection;
+            }, this.safeCast());
         }
 
         @Override
-        public final @NotNull C collection() {
-            this.ensurePermittedAndLocked();
-            return this.acquirable.readOnlyView;
+        public @NotNull C collection() {
+            return this.guardedView;
         }
 
         @Override
-        protected final @NotNull CollectionAcquisition<V, C> cast() {
+        protected @NotNull CollectionAcquisition<E, C> cast() {
             return this;
-        }
-    }
-
-    /**
-     * Represents {@linkplain ReusedCollectionAcquisition a reused collection acquisition}, which reuses an already
-     * existing {@linkplain WriteCollectionAcquisition write collection acquisition}.
-     *
-     * @param <V> a type of value of the following collection
-     * @param <C> a type of collection of the collection acquisition that is being reused
-     * @since 1.0
-     * @see WriteCollectionAcquisition
-     * @see ReusedCollectionAcquisition
-     */
-    private static final class ReusedWriteCollectionAcquisition<V, C extends Collection<V>>
-            extends ReusedCollectionAcquisition<V, C, WriteCollectionAcquisition<V, C>>
-            implements WriteCollectionAcquisition<V, C> {
-        /**
-         * Constructs the {@linkplain ReusedWriteCollectionAcquisition reused write collection acquisition}.
-         *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
-         * @since 1.0
-         */
-        private ReusedWriteCollectionAcquisition(@NotNull WriteCollectionAcquisition<V, C> originalAcquisition) {
-            // There is no need to do nullability checks, the superclass will do that for us
-            super(originalAcquisition);
-        }
-
-        @Override
-        public boolean add(@NotNull V value) {
-            // There is no need for a nullability check, the method will do that for us
-            return this.originalAcquisition.add(value);
-        }
-
-        @Override
-        public boolean remove(@NotNull V value) {
-            // There is no need for a nullability check, the method will do that for us
-            return this.originalAcquisition.remove(value);
-        }
-
-        @Override
-        public boolean addAll(@NotNull Collection<? extends V> collection) {
-            // There is no need for a nullability check, the method will do that for us
-            return this.originalAcquisition.addAll(collection);
-        }
-
-        @Override
-        public boolean removeAll(@NotNull Collection<? extends V> collection) {
-            // There is no need for a nullability check, the method will do that for us
-            return this.originalAcquisition.removeAll(collection);
-        }
-
-        @Override
-        public boolean removeIf(@NotNull Predicate<? super V> predicate) {
-            // There is no need for a nullability check, the method will do that for us
-            return this.originalAcquisition.removeIf(predicate);
-        }
-
-        @Override
-        public void clear() {
-            this.originalAcquisition.clear();
-        }
-
-        @Override
-        public boolean retainAll(@NotNull Collection<? extends V> collection) {
-            // There is no need for a nullability check, the method will do that for us
-            return this.originalAcquisition.retainAll(collection);
         }
     }
 
@@ -312,23 +176,23 @@ public abstract class CollectionAcquirable<V, C extends Collection<V>>
      * Represents an implementation of {@linkplain ReusedAcquisition a reused acquisition} and
      * {@linkplain CollectionAcquisition a collection acquisition}.
      *
-     * @param <V> a type of value of the following collection
+     * @param <E> a type of elements of the following collection
      * @param <C> a type of collection of the collection acquisition that is being reused
      * @param <A> a type of the acquisition that is being reused
      * @since 1.0
      * @see CollectionAcquisition
      * @see ReusedAcquisition
      */
-    private static class ReusedCollectionAcquisition<V, C extends Collection<V>, A extends CollectionAcquisition<V, C>>
-            extends ReusedAcquisition<A> implements CollectionAcquisition<V, C> {
+    private final static class ReusedCollectionAcquisition
+            <E, C extends Collection<E>, A extends CollectionAcquisition<E, C>>
+            extends ReusedAcquisition<A> implements CollectionAcquisition<E, C> {
         /**
-         * Constructs the {@linkplain ReusedAcquisition reused acquisition}.
+         * Constructs the {@linkplain ReusedCollectionAcquisition reused collection acquisition}.
          *
          * @param originalAcquisition an original acquisition to create the reused acquisition with
          * @since 1.0
          */
-        protected ReusedCollectionAcquisition(@NotNull A originalAcquisition) {
-            // There is no need to do nullability checks, the superclass will do that for us
+        private ReusedCollectionAcquisition(@NotNull A originalAcquisition) {
             super(originalAcquisition);
         }
 

@@ -1,6 +1,8 @@
 package net.hypejet.concurrency.collection.list;
 
 import net.hypejet.concurrency.collection.CollectionAcquirable;
+import net.hypejet.concurrency.collection.CollectionAcquisition;
+import net.hypejet.concurrency.util.iterable.collection.GuardedList;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -9,14 +11,14 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Represents {@linkplain CollectionAcquirable a collection acquirable} of {@linkplain List a list}.
+ * Represents {@linkplain CollectionAcquirable an abstract collection acquirable} of {@linkplain List a list}.
  *
- * @param <V> a type of value of the list
+ * @param <E> a type of elements of the list
  * @since 1.0
  * @see List
  * @see CollectionAcquirable
  */
-public abstract class ListAcquirable<V> extends CollectionAcquirable<V, List<V>> {
+public abstract class ListAcquirable<E> extends CollectionAcquirable<E, List<E>> {
     /**
      * Constructs the {@linkplain ListAcquirable list acquirable} with no initial elements.
      *
@@ -27,16 +29,22 @@ public abstract class ListAcquirable<V> extends CollectionAcquirable<V, List<V>>
     /**
      * Constructs the {@linkplain ListAcquirable list acquirable}.
      *
-     * @param initialElements a collection of elements that should be added to the list during initialization
+     * @param initialElements a collection of elements that should be added to the list during initialization,
+     *                        {@code null} if none
      * @since 1.0
      */
-    public ListAcquirable(@Nullable Collection<V> initialElements) {
-        // There is no need to check whether the acquirable is null, the superclass will do that for us
+    public ListAcquirable(@Nullable Collection<E> initialElements) {
         super(initialElements);
     }
 
     @Override
-    protected @NotNull List<V> createReadOnlyView(@NotNull List<V> collection) {
+    protected final @NotNull List<E> createReadOnlyView(@NotNull List<E> collection) {
         return Collections.unmodifiableList(collection);
+    }
+
+    @Override
+    protected final @NotNull List<E> createGuardedView(@NotNull List<E> collection,
+                                                       @NotNull CollectionAcquisition<E, List<E>> acquisition) {
+        return new GuardedList<>(collection, acquisition);
     }
 }

@@ -31,12 +31,11 @@ public final class HashSetAcquirable<V> extends SetAcquirable<V> {
      * @since 1.0
      */
     public HashSetAcquirable(@Nullable Collection<V> initialElements) {
-        // There is no need to check whether the acquirable is null, the superclass will do that for us
         super(initialElements);
     }
 
     @Override
-    protected @NotNull Set<V> createCollection() {
-        return new HashSet<>();
+    protected @NotNull Set<V> createCollection(@Nullable Collection<V> initialElements) {
+        return initialElements == null ? new HashSet<>() : new HashSet<>(initialElements);
     }
 }

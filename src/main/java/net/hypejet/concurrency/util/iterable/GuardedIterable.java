@@ -2,7 +2,7 @@ package net.hypejet.concurrency.util.iterable;
 
 import net.hypejet.concurrency.Acquisition;
 import net.hypejet.concurrency.util.iterator.GuardedIterator;
-import net.hypejet.concurrency.util.iterator.GuardedSpliterator;
+import net.hypejet.concurrency.util.spliterator.GuardedSpliterator;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Iterator;
@@ -22,36 +22,36 @@ import java.util.function.Consumer;
  */
 public class GuardedIterable<T, I extends Iterable<T>> implements Iterable<T> {
 
-    protected final I iterable;
+    protected final I delegate;
     protected final Acquisition acquisition;
 
     /**
      * Constructs the {@linkplain GuardedIterable guarded iterable}.
      *
-     * @param iterable the iterable that should be wrapped
+     * @param delegate the iterable that should be wrapped
      * @param acquisition an acquisition that should guard the iterable
      * @since 1.0
      */
-    public GuardedIterable(@NotNull I iterable, @NotNull Acquisition acquisition) {
-        this.iterable = Objects.requireNonNull(iterable, "The iterable must not be null");
+    public GuardedIterable(@NotNull I delegate, @NotNull Acquisition acquisition) {
+        this.delegate = Objects.requireNonNull(delegate, "The delegate must not be null");
         this.acquisition = Objects.requireNonNull(acquisition, "The acquisition must not be null");
     }
 
     @Override
     public final @NotNull Iterator<T> iterator() {
         this.acquisition.ensurePermittedAndLocked();
-        return new GuardedIterator<>(this.iterable.iterator(), this.acquisition);
+        return new GuardedIterator<>(this.delegate.iterator(), this.acquisition);
     }
 
     @Override
     public final void forEach(Consumer<? super T> action) {
         this.acquisition.ensurePermittedAndLocked();
-        this.iterable.forEach(action);
+        this.delegate.forEach(action);
     }
 
     @Override
     public final @NotNull Spliterator<T> spliterator() {
         this.acquisition.ensurePermittedAndLocked();
-        return new GuardedSpliterator<>(this.iterable.spliterator(), this.acquisition);
+        return new GuardedSpliterator<>(this.delegate.spliterator(), this.acquisition);
     }
 }

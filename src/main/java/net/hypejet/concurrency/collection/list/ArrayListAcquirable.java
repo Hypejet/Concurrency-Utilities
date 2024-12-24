@@ -31,12 +31,11 @@ public final class ArrayListAcquirable<V> extends ListAcquirable<V> {
      * @since 1.0
      */
     public ArrayListAcquirable(@Nullable Collection<V> initialElements) {
-        // There is no need to check whether the acquirable is null, the superclass will do that for us
         super(initialElements);
     }
 
     @Override
-    protected @NotNull List<V> createCollection() {
-        return new ArrayList<>();
+    protected @NotNull List<V> createCollection(@Nullable Collection<V> initialElements) {
+        return initialElements == null ? new ArrayList<>() : new ArrayList<>(initialElements);
     }
 }

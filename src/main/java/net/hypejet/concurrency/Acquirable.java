@@ -222,17 +222,6 @@ public abstract class Acquirable<A extends Acquisition> {
         }
 
         /**
-         * Casts this acquisition to an acquisition supported by {@linkplain Acquirable an acquirable} that owns
-         * this acquisition.
-         *
-         * <p>Internally {@link #safeCast()} should be used instead of directly calling this method.</p>
-         *
-         * @return the cast acquisition, must refer to the same instance as {@code this}
-         * @since 1.0
-         */
-        protected abstract @NotNull AN cast();
-
-        /**
          * Safely casts this acquisition to an acquisition supported by {@linkplain Acquirable an acquirable} that owns
          * this acquisition.
          *
@@ -240,12 +229,23 @@ public abstract class Acquirable<A extends Acquisition> {
          * @since 1.0
          * @throws IllegalArgumentException if the cast acquisition does not refer to the same instance as {@code this}
          */
-        private @NotNull AN safeCast() {
+        protected final @NotNull AN safeCast() {
             AN cast = this.cast();
             if (cast != this)
                 throw new IllegalArgumentException("The cast acquisition must refer to the same instance as \"this\"");
             return cast;
         }
+
+        /**
+         * Casts this acquisition to an acquisition supported by {@linkplain Acquirable an acquirable} that owns
+         * this acquisition.
+         *
+         * <p>In most cases {@link #safeCast()} should be used instead of directly calling this method.</p>
+         *
+         * @return the cast acquisition, must refer to the same instance as {@code this}
+         * @since 1.0
+         */
+        protected abstract @NotNull AN cast();
     }
 
     /**

@@ -2,8 +2,8 @@ package net.hypejet.concurrency.map;
 
 import net.hypejet.concurrency.Acquirable;
 import net.hypejet.concurrency.collection.CollectionAcquisition;
-import net.hypejet.concurrency.util.collection.GuardedCollection;
-import net.hypejet.concurrency.util.collection.GuardedSet;
+import net.hypejet.concurrency.util.iterable.collection.GuardedCollection;
+import net.hypejet.concurrency.util.iterable.collection.GuardedSet;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -73,7 +73,7 @@ public abstract class AbstractMapAcquirable<K, V, M extends Map<K, V>, A extends
     protected abstract @NotNull M createReadOnlyView(@NotNull M map);
 
     /**
-     * Represents a common implementation of {@linkplain AbstractAcquisition an abstract acquisition}
+     * Represents an abstract implementation of {@linkplain AbstractAcquisition an abstract acquisition}
      * and {@linkplain MapAcquisition a map acquisition}.
      *
      * @param <K> a type of key of the held map
@@ -244,7 +244,7 @@ public abstract class AbstractMapAcquirable<K, V, M extends Map<K, V>, A extends
     }
 
     /**
-     * Represents an implementation of {@linkplain ReusedAcquisition a reused acquisition} and
+     * Represents a common implementation of {@linkplain ReusedAcquisition a reused acquisition} and
      * {@linkplain MapAcquisition a map acquisition}.
      *
      * @param <K> a type of key of the following map
