@@ -2,7 +2,6 @@ package net.hypejet.concurrency.collection;
 
 import net.hypejet.concurrency.Acquirable;
 import net.hypejet.concurrency.Acquisition;
-import net.hypejet.concurrency.util.iterable.collection.GuardedCollection;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -12,7 +11,7 @@ import java.util.Collection;
  * Represents {@linkplain Acquirable an acquirable}, which guards {@linkplain Collection a collection}.
  *
  * @param <E> a type of elements of the collection
- * @param <C> a type of the collection
+ * @param <C> a type of the guarded collection
  * @since 1.0
  * @see Acquirable
  */
@@ -115,7 +114,8 @@ public abstract class CollectionAcquirable<E, C extends Collection<E>>
      * Creates a new view of a collection, which is guarded by an acquisition specified. This means that the collection
      * returned should do checks using the acquisition specified with {@link Acquisition#ensurePermittedAndLocked()}.
      *
-     * <p>{@link GuardedCollection} is recommended as an implementation of the guarded collection.</p>
+     * <p>{@link net.hypejet.concurrency.util.iterable.collection.GuardedCollection} is recommended as
+     * an implementation of the guarded collection.</p>
      *
      * @param collection a view of the collection - read-only or normal, depending on the acquisition - to create the
      *                   guarded view with
@@ -163,6 +163,7 @@ public abstract class CollectionAcquirable<E, C extends Collection<E>>
 
         @Override
         public @NotNull C collection() {
+            this.ensurePermittedAndLocked();
             return this.guardedView;
         }
 
@@ -177,7 +178,7 @@ public abstract class CollectionAcquirable<E, C extends Collection<E>>
      * {@linkplain CollectionAcquisition a collection acquisition}.
      *
      * @param <E> a type of elements of the following collection
-     * @param <C> a type of collection of the collection acquisition that is being reused
+     * @param <C> a type of guarded collection of the collection acquisition that is being reused
      * @param <A> a type of the acquisition that is being reused
      * @since 1.0
      * @see CollectionAcquisition

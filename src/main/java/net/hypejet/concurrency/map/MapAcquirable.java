@@ -1,28 +1,36 @@
 package net.hypejet.concurrency.map;
 
+import net.hypejet.concurrency.Acquirable;
 import net.hypejet.concurrency.Acquisition;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Collections;
 import java.util.Map;
 
 /**
- * Represents an implementation of {@linkplain AbstractMapAcquirable an abstract map acquirable}, which guards
- * {@linkplain Map a clean map}
+ * Represents {@linkplain Acquirable an acquirable}, which guards {@linkplain Map a map}.
  *
  * @param <K> a type of key of the map
  * @param <V> a type of value of the map
+ * @param <M> a type of the map
  * @since 1.0
- * @see AbstractMapAcquirable
+ * @see Map
+ * @see Acquirable
  */
-public abstract class MapAcquirable<K, V> extends AbstractMapAcquirable<K, V, Map<K, V>, MapAcquisition<K, V>> {
+public abstract class MapAcquirable<K, V, M extends Map<K, V>>
+        extends Acquirable<MapAcquisition<K, V, M>> {
+    
+    private final @NotNull M map;
+    private final @NotNull M readOnlyView;
+
     /**
      * Constructs the {@linkplain MapAcquirable map acquirable} with no initial entries.
      *
      * @since 1.0
      */
-    public MapAcquirable() {}
+    public MapAcquirable() {
+        this(null);
+    }
 
     /**
      * Constructs the {@linkplain MapAcquirable map acquirable}.
@@ -32,7 +40,8 @@ public abstract class MapAcquirable<K, V> extends AbstractMapAcquirable<K, V, Ma
      * @since 1.0
      */
     public MapAcquirable(@Nullable Map<K, V> initialEntries) {
-        super(initialEntries);
+        this.map = this.createMap(initialEntries);
+        this.readOnlyView = this.createReadOnlyView(this.map);
     }
 
     /**
@@ -49,8 +58,8 @@ public abstract class MapAcquirable<K, V> extends AbstractMapAcquirable<K, V, Ma
      * @since 1.0
      */
     @Override
-    public final @NotNull MapAcquisition<K, V> acquireRead() {
-        MapAcquisition<K, V> foundAcquisition = this.findAcquisition();
+    public final @NotNull MapAcquisition<K, V, M> acquireRead() {
+        MapAcquisition<K, V, M> foundAcquisition = this.findAcquisition();
         if (foundAcquisition != null)
             return new ReusedMapAcquisition<>(foundAcquisition);
         return new MapAcquisitionImpl<>(this, Acquisition.AcquisitionType.READ);
@@ -72,8 +81,8 @@ public abstract class MapAcquirable<K, V> extends AbstractMapAcquirable<K, V, Ma
      *                                  acquisition
      */
     @Override
-    public final @NotNull MapAcquisition<K, V> acquireWrite() {
-        MapAcquisition<K, V> foundAcquisition = this.findAcquisition();
+    public final @NotNull MapAcquisition<K, V, M> acquireWrite() {
+        MapAcquisition<K, V, M> foundAcquisition = this.findAcquisition();
         if (foundAcquisition == null)
             return new MapAcquisitionImpl<>(this, Acquisition.AcquisitionType.WRITE);
 
@@ -84,35 +93,116 @@ public abstract class MapAcquirable<K, V> extends AbstractMapAcquirable<K, V, Ma
         return new ReusedMapAcquisition<>(foundAcquisition);
     }
 
-    @Override
-    protected final @NotNull Map<K, V> createReadOnlyView(@NotNull Map<K, V> map) {
-        return Collections.unmodifiableMap(map);
-    }
+    /**
+     * Creates a new mutable instance of the map.
+     *
+     * @param initialEntries a map of entries that should be added to the map during initialization, {@code null} if
+     *                       none
+     * @return the created instance
+     * @since 1.0
+     */
+    protected abstract @NotNull M createMap(@Nullable Map<K, V> initialEntries);
 
     /**
-     * Represents an implementation of {@linkplain AbstractMapAcquisition an abstract map acquisition}.
+     * Creates a new read-only view of a map specified.
      *
-     * @param <K> a type of key of the map
-     * @param <V> a type of value of the map
+     * @param map the map to create the read-only view with
+     * @return the read-only view created
      * @since 1.0
-     * @see AbstractMapAcquisition
      */
-    private static final class MapAcquisitionImpl<K, V>
-            extends AbstractMapAcquisition<K, V, Map<K, V>, MapAcquisition<K, V>, MapAcquirable<K, V>> {
+    protected abstract @NotNull M createReadOnlyView(@NotNull M map);
+
+    /**
+     * Creates a new view of a map, which is guarded by an acquisition specified. This means that the map
+     * returned should do checks using the acquisition specified with {@link Acquisition#ensurePermittedAndLocked()}.
+     *
+     * <p>{@link net.hypejet.concurrency.util.map.GuardedMap} is recommended as an implementation of the guarded
+     * map.</p>
+     *
+     * @param map a view of the map - read-only or normal, depending on the acquisition - to create the guarded view
+     *            with
+     * @param acquisition an acquisition that guards the map
+     * @return the guarded view
+     * @since 1.0
+     */
+    protected abstract @NotNull M createGuardedView(@NotNull M map, @NotNull MapAcquisition<K, V, M> acquisition);
+
+    /**
+     * Represents an implementation of {@linkplain AbstractAcquisition an acquisition} and
+     * {@linkplain MapAcquisition a map acquisition}.
+     *
+     * @param <K> a type of key of the held map
+     * @param <V> a type of value of the held map
+     * @param <M> a type of the held map
+     * @param <AE> a type of acquirable that the map acquisition should be registered in
+     * @since 1.0
+     * @see MapAcquisition
+     * @see AbstractAcquisition
+     */
+    private static final class MapAcquisitionImpl
+            <K, V, M extends Map<K, V>, AE extends MapAcquirable<K, V, M>>
+            extends AbstractAcquisition<MapAcquisition<K, V, M>, AE> implements MapAcquisition<K, V, M> {
+
+        private final M guardedView;
+
         /**
-         * Constructs the {@linkplain MapAcquisitionImpl read map acquisition implementation}.
+         * Constructs the {@linkplain MapAcquisitionImpl map acquisition implementation}.
          *
          * @param acquirable an acquirable whose map is guarded by the lock
          * @param type a type, of which the acquisition should be
          * @since 1.0
          */
-        private MapAcquisitionImpl(@NotNull MapAcquirable<K, V> acquirable, @NotNull AcquisitionType type) {
+        private MapAcquisitionImpl(@NotNull AE acquirable, @NotNull AcquisitionType type) {
             super(acquirable, type);
+
+            // Java requires a cast here for some reason
+            MapAcquirable<K, V, M> castAcquirable = acquirable;
+            this.guardedView = castAcquirable.createGuardedView(switch (this.acquisitionType()) {
+                case READ -> castAcquirable.readOnlyView;
+                case WRITE -> castAcquirable.map;
+            }, this);
         }
 
         @Override
-        protected @NotNull MapAcquisition<K, V> cast() {
+        public @NotNull M map() {
+            this.ensurePermittedAndLocked();
+            return this.guardedView;
+        }
+
+        @Override
+        protected @NotNull MapAcquisition<K, V, M> cast() {
             return this;
+        }
+    }
+
+    /**
+     * Represents an implementation of {@linkplain ReusedAcquisition a reused acquisition} and
+     * {@linkplain MapAcquisition a map acquisition}.
+     *
+     * @param <K> a type of key of the following map
+     * @param <V> a type of value of the following map
+     * @param <M> a type of graded map of the map acquisition that is being reused
+     * @param <A> a type of the acquisition that is being reused
+     * @since 1.0
+     * @see MapAcquisition
+     * @see ReusedAcquisition
+     */
+    private final static class ReusedMapAcquisition<K, V, M extends Map<K, V>, A extends MapAcquisition<K, V, M>>
+            extends ReusedAcquisition<A> implements MapAcquisition<K, V, M> {
+        /**
+         * Constructs the {@linkplain ReusedMapAcquisition reused map acquisition}.
+         *
+         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @since 1.0
+         */
+        private ReusedMapAcquisition(@NotNull A originalAcquisition) {
+            // There is no need to do nullability checks, the superclass will do that for us
+            super(originalAcquisition);
+        }
+
+        @Override
+        public @NotNull M map() {
+            return this.originalAcquisition.map();
         }
     }
 }

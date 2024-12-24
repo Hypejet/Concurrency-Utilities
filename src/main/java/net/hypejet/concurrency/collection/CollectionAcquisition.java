@@ -10,7 +10,7 @@ import java.util.Collection;
  * {@linkplain Collection collection}.
  *
  * @param <E> a type of elements of the collection
- * @param <C> a type of the collection
+ * @param <C> a type of the guarded collection
  * @since 1.0
  * @see Collection
  * @see Acquisition
@@ -21,8 +21,8 @@ public interface CollectionAcquisition<E, C extends Collection<E>> extends Acqui
      * {@linkplain Acquisition#ensurePermittedAndLocked() an acquisition permission and lock check} is also being
      * done.
      *
-     * <p>The guarded view can be mutable, depending on {@linkplain AcquisitionType an acquisition type} of this
-     * acquisition.</p>
+     * <p>The guarded view might allow mutable operations, depending on
+     * {@linkplain AcquisitionType an acquisition type} of this acquisition.</p>
      *
      * @return the guarded view
      * @since 1.0

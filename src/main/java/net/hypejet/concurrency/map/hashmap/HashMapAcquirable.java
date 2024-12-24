@@ -1,9 +1,12 @@
 package net.hypejet.concurrency.map.hashmap;
 
 import net.hypejet.concurrency.map.MapAcquirable;
+import net.hypejet.concurrency.map.MapAcquisition;
+import net.hypejet.concurrency.util.map.GuardedMap;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -17,7 +20,7 @@ import java.util.Map;
  * @see HashMap
  * @see MapAcquirable
  */
-public final class HashMapAcquirable<K, V> extends MapAcquirable<K, V> {
+public final class HashMapAcquirable<K, V> extends MapAcquirable<K, V, Map<K, V>> {
     /**
      * Constructs the {@linkplain HashMapAcquirable hash map acquirable} with no initial entries.
      *
@@ -38,8 +41,17 @@ public final class HashMapAcquirable<K, V> extends MapAcquirable<K, V> {
 
     @Override
     protected @NotNull Map<K, V> createMap(@Nullable Map<K, V> initialEntries) {
-        if (initialEntries == null)
-            return new HashMap<>();
-        return new HashMap<>(initialEntries);
+        return new HashMap<>();
+    }
+
+    @Override
+    protected @NotNull Map<K, V> createReadOnlyView(@NotNull Map<K, V> map) {
+        return Collections.unmodifiableMap(map);
+    }
+
+    @Override
+    protected @NotNull Map<K, V> createGuardedView(@NotNull Map<K, V> map,
+                                                   @NotNull MapAcquisition<K, V, Map<K, V>> acquisition) {
+        return new GuardedMap<>(map, acquisition);
     }
 }
