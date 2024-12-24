@@ -134,7 +134,7 @@ public final class ObjectAcquirable<O> extends Acquirable<ObjectAcquisition<O>> 
      * @see AbstractAcquisition
      */
     private static abstract class AbstractObjectAcquisition<O>
-            extends Acquirable.AbstractAcquisition<ObjectAcquisition<O>, ObjectAcquirable<O>>
+            extends AbstractAcquisition<ObjectAcquisition<O>, ObjectAcquirable<O>>
             implements ObjectAcquisition<O> {
         /**
          * Constructs the {@linkplain AbstractObjectAcquisition abstract object acquisition}.

@@ -41,7 +41,7 @@ public final class HashMapAcquirable<K, V> extends MapAcquirable<K, V, Map<K, V>
 
     @Override
     protected @NotNull Map<K, V> createMap(@Nullable Map<K, V> initialEntries) {
-        return new HashMap<>();
+        return initialEntries == null ? new HashMap<>() : new HashMap<>(initialEntries);
     }
 
     @Override
