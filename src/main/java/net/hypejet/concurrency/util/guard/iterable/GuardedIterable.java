@@ -1,12 +1,12 @@
-package net.hypejet.concurrency.util.iterable;
+package net.hypejet.concurrency.util.guard.iterable;
 
 import net.hypejet.concurrency.Acquisition;
-import net.hypejet.concurrency.util.iterator.GuardedIterator;
-import net.hypejet.concurrency.util.spliterator.GuardedSpliterator;
+import net.hypejet.concurrency.util.guard.GuardedObject;
+import net.hypejet.concurrency.util.guard.iterator.GuardedIterator;
+import net.hypejet.concurrency.util.guard.spliterator.GuardedSpliterator;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Iterator;
-import java.util.Objects;
 import java.util.Spliterator;
 import java.util.function.Consumer;
 
@@ -20,11 +20,7 @@ import java.util.function.Consumer;
  * @see Acquisition
  * @see Iterable
  */
-public class GuardedIterable<T, I extends Iterable<T>> implements Iterable<T> {
-
-    protected final I delegate;
-    protected final Acquisition acquisition;
-
+public class GuardedIterable<T, I extends Iterable<T>> extends GuardedObject<I> implements Iterable<T> {
     /**
      * Constructs the {@linkplain GuardedIterable guarded iterable}.
      *
@@ -33,8 +29,7 @@ public class GuardedIterable<T, I extends Iterable<T>> implements Iterable<T> {
      * @since 1.0
      */
     public GuardedIterable(@NotNull I delegate, @NotNull Acquisition acquisition) {
-        this.delegate = Objects.requireNonNull(delegate, "The delegate must not be null");
-        this.acquisition = Objects.requireNonNull(acquisition, "The acquisition must not be null");
+        super(delegate, acquisition);
     }
 
     @Override

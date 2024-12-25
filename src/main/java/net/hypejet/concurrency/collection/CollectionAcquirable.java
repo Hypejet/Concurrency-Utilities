@@ -2,6 +2,7 @@ package net.hypejet.concurrency.collection;
 
 import net.hypejet.concurrency.Acquirable;
 import net.hypejet.concurrency.Acquisition;
+import net.hypejet.concurrency.util.guard.iterable.collection.GuardedCollection;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -114,7 +115,7 @@ public abstract class CollectionAcquirable<E, C extends Collection<E>>
      * Creates a new view of a collection, which is guarded by an acquisition specified. This means that the collection
      * returned should do checks using the acquisition specified with {@link Acquisition#ensurePermittedAndLocked()}.
      *
-     * <p>{@link net.hypejet.concurrency.util.iterable.collection.GuardedCollection} is recommended as
+     * <p>{@link GuardedCollection} is recommended as
      * an implementation of the guarded collection.</p>
      *
      * @param collection a view of the collection - read-only or normal, depending on the acquisition - to create the

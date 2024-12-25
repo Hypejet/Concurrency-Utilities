@@ -1,7 +1,7 @@
-package net.hypejet.concurrency.util.iterable.collection;
+package net.hypejet.concurrency.util.guard.iterable.collection;
 
 import net.hypejet.concurrency.Acquisition;
-import net.hypejet.concurrency.util.iterable.GuardedIterable;
+import net.hypejet.concurrency.util.guard.iterable.GuardedIterable;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Collection;

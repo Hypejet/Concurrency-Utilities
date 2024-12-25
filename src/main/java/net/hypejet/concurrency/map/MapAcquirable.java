@@ -2,6 +2,7 @@ package net.hypejet.concurrency.map;
 
 import net.hypejet.concurrency.Acquirable;
 import net.hypejet.concurrency.Acquisition;
+import net.hypejet.concurrency.util.guard.map.GuardedMap;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -116,7 +117,7 @@ public abstract class MapAcquirable<K, V, M extends Map<K, V>>
      * Creates a new view of a map, which is guarded by an acquisition specified. This means that the map
      * returned should do checks using the acquisition specified with {@link Acquisition#ensurePermittedAndLocked()}.
      *
-     * <p>{@link net.hypejet.concurrency.util.map.GuardedMap} is recommended as an implementation of the guarded
+     * <p>{@link GuardedMap} is recommended as an implementation of the guarded
      * map.</p>
      *
      * @param map a view of the map - read-only or normal, depending on the acquisition - to create the guarded view

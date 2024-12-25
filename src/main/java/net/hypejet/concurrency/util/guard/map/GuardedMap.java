@@ -1,14 +1,15 @@
-package net.hypejet.concurrency.util.map;
+package net.hypejet.concurrency.util.guard.map;
 
 import net.hypejet.concurrency.Acquisition;
-import net.hypejet.concurrency.util.iterable.collection.GuardedCollection;
-import net.hypejet.concurrency.util.iterable.collection.GuardedSet;
+import net.hypejet.concurrency.util.guard.GuardedObject;
+import net.hypejet.concurrency.util.guard.iterable.collection.GuardedCollection;
+import net.hypejet.concurrency.util.guard.iterable.collection.GuardedSet;
+import net.hypejet.concurrency.util.wrapping.iterable.collection.ElementWrappingSet;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collection;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
@@ -19,17 +20,13 @@ import java.util.function.Function;
  * is locked and a caller thread has a permission to it during doing any operation.
  *
  * @param <K> a type of keys of the map
- * @param <V> a type of value of the map
+ * @param <V> a type of values of the map
  * @param <M> a type of the guarded map
  * @since 1.0
  * @see Acquisition
  * @see Map
  */
-public class GuardedMap<K, V, M extends Map<K, V>> implements Map<K, V> {
-
-    protected final M delegate;
-    protected final Acquisition acquisition;
-
+public class GuardedMap<K, V, M extends Map<K, V>> extends GuardedObject<M> implements Map<K, V> {
     /**
      * Constructs the {@linkplain GuardedMap guarded map}.
      *
@@ -38,8 +35,7 @@ public class GuardedMap<K, V, M extends Map<K, V>> implements Map<K, V> {
      * @since 1.0
      */
     public GuardedMap(@NotNull M delegate, @NotNull Acquisition acquisition) {
-        this.delegate = Objects.requireNonNull(delegate, "The delegate must not be null");
-        this.acquisition = Objects.requireNonNull(acquisition, "The acquisition must not be null");
+        super(delegate, acquisition);
     }
 
     @Override
@@ -111,7 +107,13 @@ public class GuardedMap<K, V, M extends Map<K, V>> implements Map<K, V> {
     @Override
     public final @NotNull Set<Entry<K, V>> entrySet() {
         this.acquisition.ensurePermittedAndLocked();
-        return new GuardedSet<>(this.delegate.entrySet(), this.acquisition);
+        return new GuardedSet<>(
+                new ElementWrappingSet<>(
+                        this.delegate.entrySet(),
+                        entry -> new GuardedMapEntry<>(entry, this.acquisition)
+                ),
+                this.acquisition
+        );
     }
 
     @Override

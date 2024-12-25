@@ -2,7 +2,7 @@ package net.hypejet.concurrency.map.hashmap;
 
 import net.hypejet.concurrency.map.MapAcquirable;
 import net.hypejet.concurrency.map.MapAcquisition;
-import net.hypejet.concurrency.util.map.GuardedMap;
+import net.hypejet.concurrency.util.guard.map.GuardedMap;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 

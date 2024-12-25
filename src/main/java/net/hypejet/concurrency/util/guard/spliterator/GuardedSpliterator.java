@@ -1,10 +1,10 @@
-package net.hypejet.concurrency.util.spliterator;
+package net.hypejet.concurrency.util.guard.spliterator;
 
 import net.hypejet.concurrency.Acquisition;
+import net.hypejet.concurrency.util.guard.GuardedObject;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Comparator;
-import java.util.Objects;
 import java.util.Spliterator;
 import java.util.function.Consumer;
 
@@ -19,11 +19,7 @@ import java.util.function.Consumer;
  * @see Acquisition
  * @see Spliterator
  */
-public class GuardedSpliterator<T, S extends Spliterator<T>> implements Spliterator<T> {
-
-    protected final S delegate;
-    protected final Acquisition acquisition;
-
+public class GuardedSpliterator<T, S extends Spliterator<T>> extends GuardedObject<S> implements Spliterator<T> {
     /**
      * Constructs the {@linkplain GuardedSpliterator guarded spliterator}.
      *
@@ -32,8 +28,7 @@ public class GuardedSpliterator<T, S extends Spliterator<T>> implements Splitera
      * @since 1.0
      */
     public GuardedSpliterator(@NotNull S delegate, @NotNull Acquisition acquisition) {
-        this.delegate = Objects.requireNonNull(delegate, "The delegate must not be null");
-        this.acquisition = Objects.requireNonNull(acquisition, "The acquisition must not be null");
+        super(delegate, acquisition);
     }
 
     @Override

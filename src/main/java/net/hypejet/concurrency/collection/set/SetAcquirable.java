@@ -2,7 +2,7 @@ package net.hypejet.concurrency.collection.set;
 
 import net.hypejet.concurrency.collection.CollectionAcquirable;
 import net.hypejet.concurrency.collection.CollectionAcquisition;
-import net.hypejet.concurrency.util.iterable.collection.GuardedSet;
+import net.hypejet.concurrency.util.guard.iterable.collection.GuardedSet;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 

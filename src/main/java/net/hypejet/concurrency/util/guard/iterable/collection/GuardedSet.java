@@ -1,4 +1,4 @@
-package net.hypejet.concurrency.util.iterable.collection;
+package net.hypejet.concurrency.util.guard.iterable.collection;
 
 import net.hypejet.concurrency.Acquisition;
 import org.jetbrains.annotations.NotNull;
