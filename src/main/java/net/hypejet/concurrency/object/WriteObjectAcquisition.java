@@ -1,6 +1,6 @@
 package net.hypejet.concurrency.object;
 
-import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.UnknownNullability;
 
 /**
  * Represents {@linkplain ObjectAcquisition an object acquisition} that allows for {@linkplain O an object}, which
@@ -17,5 +17,5 @@ public interface WriteObjectAcquisition<O> extends ObjectAcquisition<O> {
      * @param value a value to replace the object with
      * @since 1.0
      */
-    void set(@NotNull O value);
+    void set(@UnknownNullability O value);
 }

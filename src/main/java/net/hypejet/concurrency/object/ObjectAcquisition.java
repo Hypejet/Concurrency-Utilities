@@ -2,7 +2,7 @@ package net.hypejet.concurrency.object;
 
 import net.hypejet.concurrency.Acquisition;
 import org.jetbrains.annotations.Contract;
-import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.UnknownNullability;
 
 /**
  * Represents {@linkplain Acquisition an acquisition} that allows getting a guarded {@linkplain O object}.
@@ -19,5 +19,5 @@ public interface ObjectAcquisition<O> extends Acquisition {
      * @since 1.0
      */
     @Contract(pure = true)
-    @NotNull O get();
+    @UnknownNullability O get();
 }
