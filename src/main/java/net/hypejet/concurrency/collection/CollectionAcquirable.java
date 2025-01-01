@@ -74,7 +74,7 @@ public abstract class CollectionAcquirable<E, C extends Collection<E>>
         if (!(originalAcquisition instanceof CollectionAcquisitionImpl<?, ?, ?> castAcquisition))
             throw new IllegalArgumentException("The acquisition specified is not a valid collection acquisition");
         castAcquisition.updateGuardedView();
-        return originalAcquisition;
+        return new ReusedCollectionAcquisition<>(originalAcquisition);
     }
 
     @Override

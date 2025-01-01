@@ -76,7 +76,7 @@ public abstract class MapAcquirable<K, V, M extends Map<K, V>>
         if (!(originalAcquisition instanceof MapAcquisitionImpl<?, ?, ?, ?> castAcquisition))
             throw new IllegalArgumentException("The acquisition specified is not a valid map acquisition");
         castAcquisition.updateGuardedView();
-        return originalAcquisition;
+        return new ReusedMapAcquisition<>(originalAcquisition);
     }
 
     @Override
