@@ -42,8 +42,9 @@ public abstract class Acquirable<A extends Acquisition, WA extends A> {
     public final @NotNull A acquireRead() {
         A foundAcquisition = this.acquisitions.get(Thread.currentThread());
         if (foundAcquisition != null) {
-            ensureReused(foundAcquisition);
-            return this.reuseReadAcquisition(foundAcquisition);
+            A reusedAcquisition = this.reuseReadAcquisition(foundAcquisition);
+            ensureReused(reusedAcquisition);
+            return reusedAcquisition;
         }
 
         A createdAcquisition = this.createReadAcquisition();
