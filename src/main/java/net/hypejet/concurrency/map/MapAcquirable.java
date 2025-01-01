@@ -19,7 +19,7 @@ import java.util.Map;
  * @see Acquirable
  */
 public abstract class MapAcquirable<K, V, M extends Map<K, V>>
-        extends Acquirable<MapAcquisition<K, V, M>> {
+        extends Acquirable<MapAcquisition<K, V, M>, MapAcquisition<K, V, M>> {
     
     private final @NotNull M map;
     private final @NotNull M readOnlyView;
@@ -45,53 +45,48 @@ public abstract class MapAcquirable<K, V, M extends Map<K, V>>
         this.readOnlyView = this.createReadOnlyView(this.map);
     }
 
-    /**
-     * Creates {@linkplain MapAcquisition a map acquisition} of a map held by this
-     * {@linkplain MapAcquirable map acquirable} that supports read-only operations.
-     *
-     * <p>If the caller thread has already created an acquisition a special implementation is used, which reuses it,
-     * does nothing when {@link MapAcquisition#close()} is called and always returns {@code true} when
-     * {@link MapAcquisition#isUnlocked()} is called.</p>
-     *
-     * <p>If the acquisition needs to be unlocked the already existing acquisition needs to be used to do that.</p>
-     *
-     * @return the acquisition
-     * @since 1.0
-     */
     @Override
-    public final @NotNull MapAcquisition<K, V, M> acquireRead() {
-        MapAcquisition<K, V, M> foundAcquisition = this.findAcquisition();
-        if (foundAcquisition != null)
-            return new ReusedMapAcquisition<>(foundAcquisition);
+    protected final @NotNull MapAcquisition<K, V, M> createReadAcquisition() {
         return new MapAcquisitionImpl<>(this, Acquisition.AcquisitionType.READ);
     }
 
-    /**
-     * Creates {@linkplain MapAcquisition a map acquisition} of this {@linkplain MapAcquirable map acquirable} that
-     * supports write operations.
-     *
-     * <p>If the caller thread has already created a write acquisition a special implementation is used, which
-     * reuses it, does nothing when {@link MapAcquisition#close()} is called and always returns {@code true}
-     * when {@link MapAcquisition#isUnlocked()} is called.</p>
-     *
-     * <p>If the acquisition needs to be unlocked the already existing acquisition needs to be used to do that.</p>
-     *
-     * @return the acquisition
-     * @since 1.0
-     * @throws IllegalArgumentException if the caller thread has already created an acquisition, but it is not a write
-     *                                  acquisition
-     */
     @Override
-    public final @NotNull MapAcquisition<K, V, M> acquireWrite() {
-        MapAcquisition<K, V, M> foundAcquisition = this.findAcquisition();
-        if (foundAcquisition == null)
-            return new MapAcquisitionImpl<>(this, Acquisition.AcquisitionType.WRITE);
+    protected final @NotNull MapAcquisition<K, V, M> createWriteAcquisition() {
+        return new MapAcquisitionImpl<>(this, Acquisition.AcquisitionType.WRITE);
+    }
 
-        if (foundAcquisition.acquisitionType() != Acquisition.AcquisitionType.WRITE) {
-            throw new IllegalArgumentException("The caller thread has already created an acquisition, but it is not" +
-                    "a write acquisition");
-        }
-        return new ReusedMapAcquisition<>(foundAcquisition);
+    @Override
+    protected final @NotNull MapAcquisition<K, V, M> reuseReadAcquisition(
+            @NotNull MapAcquisition<K, V, M> originalAcquisition
+    ) {
+        return new ReusedMapAcquisition<>(originalAcquisition);
+    }
+
+    @Override
+    protected final @NotNull MapAcquisition<K, V, M> reuseWriteAcquisition(
+            @NotNull MapAcquisition<K, V, M> originalAcquisition
+    ) {
+        return new ReusedMapAcquisition<>(originalAcquisition);
+    }
+
+    @Override
+    protected final @NotNull MapAcquisition<K, V, M> createUpgradedAcquisition(
+            @NotNull MapAcquisition<K, V, M> originalAcquisition
+    ) {
+        if (!(originalAcquisition instanceof MapAcquisitionImpl<?, ?, ?, ?> castAcquisition))
+            throw new IllegalArgumentException("The acquisition specified is not a valid map acquisition");
+        castAcquisition.updateGuardedView();
+        return originalAcquisition;
+    }
+
+    @Override
+    protected final @Nullable MapAcquisition<K, V, M> castToWriteAcquisition(
+            @NotNull MapAcquisition<K, V, M> acquisition
+    ) {
+        return switch (acquisition.acquisitionType()) {
+            case READ -> null;
+            case WRITE -> acquisition;
+        };
     }
 
     /**
@@ -144,7 +139,7 @@ public abstract class MapAcquirable<K, V, M extends Map<K, V>>
             <K, V, M extends Map<K, V>, AE extends MapAcquirable<K, V, M>>
             extends AbstractAcquisition<MapAcquisition<K, V, M>, AE> implements MapAcquisition<K, V, M> {
 
-        private final M guardedView;
+        private @NotNull M guardedView;
 
         /**
          * Constructs the {@linkplain MapAcquisitionImpl map acquisition implementation}.
@@ -155,13 +150,7 @@ public abstract class MapAcquirable<K, V, M extends Map<K, V>>
          */
         private MapAcquisitionImpl(@NotNull AE acquirable, @NotNull AcquisitionType type) {
             super(acquirable, type);
-
-            // Java requires a cast here for some reason
-            MapAcquirable<K, V, M> castAcquirable = acquirable;
-            this.guardedView = castAcquirable.createGuardedView(switch (this.acquisitionType()) {
-                case READ -> castAcquirable.readOnlyView;
-                case WRITE -> castAcquirable.map;
-            }, this);
+            this.updateGuardedView();
         }
 
         @Override
@@ -173,6 +162,15 @@ public abstract class MapAcquirable<K, V, M extends Map<K, V>>
         @Override
         protected @NotNull MapAcquisition<K, V, M> cast() {
             return this;
+        }
+
+        private void updateGuardedView() {
+            // Java for some reason needs a cast of the acquirable to access private methods and fields
+            MapAcquirable<K, V, M> castAcquirable = this.acquirable;
+            this.guardedView = castAcquirable.createGuardedView(switch (this.acquisitionType()) {
+                case READ -> castAcquirable.readOnlyView;
+                case WRITE -> castAcquirable.map;
+            }, this);
         }
     }
 

@@ -17,7 +17,7 @@ import java.util.Collection;
  * @see Acquirable
  */
 public abstract class CollectionAcquirable<E, C extends Collection<E>>
-        extends Acquirable<CollectionAcquisition<E, C>> {
+        extends Acquirable<CollectionAcquisition<E, C>, CollectionAcquisition<E, C>> {
 
     private final @NotNull C collection;
     private final @NotNull C readOnlyView;
@@ -43,53 +43,48 @@ public abstract class CollectionAcquirable<E, C extends Collection<E>>
         this.readOnlyView = this.createReadOnlyView(this.collection);
     }
 
-    /**
-     * Creates {@linkplain CollectionAcquisition a collection acquisition} of this
-     * {@linkplain CollectionAcquirable collection acquirable} that supports read-only operations.
-     *
-     * <p>If the caller thread has already created an acquisition a special implementation is used, which reuses it,
-     * does nothing when {@link CollectionAcquisition#close()} is called and always returns {@code true} when
-     * {@link CollectionAcquisition#isUnlocked()} is called.</p>
-     *
-     * <p>If the acquisition needs to be unlocked the already existing acquisition needs to be used to do that.</p>
-     *
-     * @return the acquisition
-     * @since 1.0
-     */
     @Override
-    public final @NotNull CollectionAcquisition<E, C> acquireRead() {
-        CollectionAcquisition<E, C> foundAcquisition = this.findAcquisition();
-        if (foundAcquisition != null)
-            return new ReusedCollectionAcquisition<>(foundAcquisition);
+    protected final @NotNull CollectionAcquisition<E, C> createReadAcquisition() {
         return new CollectionAcquisitionImpl<>(this, Acquisition.AcquisitionType.READ);
     }
 
-    /**
-     * Creates {@linkplain CollectionAcquisition a collection acquisition} of this
-     * {@linkplain CollectionAcquirable collection acquirable} that supports write operations.
-     *
-     * <p>If the caller thread has already created a write acquisition a special implementation is used, which
-     * reuses it, does nothing when {@link CollectionAcquisition#close()} is called and always returns {@code true}
-     * when {@link CollectionAcquisition#isUnlocked()} is called.</p>
-     *
-     * <p>If the acquisition needs to be unlocked the already existing acquisition needs to be used to do that.</p>
-     *
-     * @return the acquisition
-     * @since 1.0
-     * @throws IllegalArgumentException if the caller thread has already created an acquisition, but it is not a write
-     *                                  acquisition
-     */
     @Override
-    public final @NotNull CollectionAcquisition<E, C> acquireWrite() {
-        CollectionAcquisition<E, C> foundAcquisition = this.findAcquisition();
-        if (foundAcquisition == null)
-            return new CollectionAcquisitionImpl<>(this, Acquisition.AcquisitionType.WRITE);
+    protected final @NotNull CollectionAcquisition<E, C> createWriteAcquisition() {
+        return new CollectionAcquisitionImpl<>(this, Acquisition.AcquisitionType.WRITE);
+    }
 
-        if (foundAcquisition.acquisitionType() != Acquisition.AcquisitionType.WRITE) {
-            throw new IllegalArgumentException("The caller thread has already created an acquisition," +
-                    " but it is not a write acquisition");
-        }
-        return new ReusedCollectionAcquisition<>(foundAcquisition);
+    @Override
+    protected final @NotNull CollectionAcquisition<E, C> reuseReadAcquisition(
+            @NotNull CollectionAcquisition<E, C> originalAcquisition
+    ) {
+        return new ReusedCollectionAcquisition<>(originalAcquisition);
+    }
+
+    @Override
+    protected final @NotNull CollectionAcquisition<E, C> reuseWriteAcquisition(
+            @NotNull CollectionAcquisition<E, C> originalAcquisition
+    ) {
+        return new ReusedCollectionAcquisition<>(originalAcquisition);
+    }
+
+    @Override
+    protected final @NotNull CollectionAcquisition<E, C> createUpgradedAcquisition(
+            @NotNull CollectionAcquisition<E, C> originalAcquisition
+    ) {
+        if (!(originalAcquisition instanceof CollectionAcquisitionImpl<?, ?, ?> castAcquisition))
+            throw new IllegalArgumentException("The acquisition specified is not a valid collection acquisition");
+        castAcquisition.updateGuardedView();
+        return originalAcquisition;
+    }
+
+    @Override
+    protected final @Nullable CollectionAcquisition<E, C> castToWriteAcquisition(
+            @NotNull CollectionAcquisition<E, C> acquisition
+    ) {
+        return switch (acquisition.acquisitionType()) {
+            case READ -> null;
+            case WRITE -> acquisition;
+        };
     }
 
     /**
@@ -142,7 +137,7 @@ public abstract class CollectionAcquirable<E, C extends Collection<E>>
             <E, C extends Collection<E>, AE extends CollectionAcquirable<E, C>>
             extends AbstractAcquisition<CollectionAcquisition<E, C>, AE> implements CollectionAcquisition<E, C> {
 
-        private final C guardedView;
+        private @NotNull C guardedView;
 
         /**
          * Constructs the {@linkplain CollectionAcquisitionImpl collection acquisition}.
@@ -153,15 +148,8 @@ public abstract class CollectionAcquirable<E, C extends Collection<E>>
          */
         private CollectionAcquisitionImpl(@NotNull AE acquirable, @NotNull AcquisitionType type) {
             super(acquirable, type);
-
-            // Java requires a cast here for some reason
-            CollectionAcquirable<E, C> castAcquirable = acquirable;
-            this.guardedView = acquirable.createGuardedView(switch (this.acquisitionType()) {
-                case READ -> castAcquirable.readOnlyView;
-                case WRITE -> castAcquirable.collection;
-            }, this.safeCast());
+            this.updateGuardedView();
         }
-
         @Override
         public @NotNull C collection() {
             this.ensurePermittedAndLocked();
@@ -171,6 +159,15 @@ public abstract class CollectionAcquirable<E, C extends Collection<E>>
         @Override
         protected @NotNull CollectionAcquisition<E, C> cast() {
             return this;
+        }
+
+        private void updateGuardedView() {
+            // Java for some reason needs a cast of the acquirable to access private methods and fields
+            CollectionAcquirable<E, C> castAcquirable = this.acquirable;
+            this.guardedView = this.acquirable.createGuardedView(switch (this.acquisitionType()) {
+                case READ -> castAcquirable.readOnlyView;
+                case WRITE -> castAcquirable.collection;
+            }, this.safeCast());
         }
     }
 
