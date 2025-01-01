@@ -153,7 +153,7 @@ public final class BooleanAcquirable extends Acquirable<BooleanAcquisition, Writ
 
     /**
      * Represents {@linkplain ReusedBooleanAcquisition a reused boolean acquisition}, which reuses
-     * {@linkplain BooleanAcquirable a boolean acquisition}, whose lock has been upgraded to a write lock.
+     * {@linkplain BooleanAcquisition a boolean acquisition}, whose lock has been upgraded to a write lock.
      *
      * @since 1.0
      * @see BooleanAcquisition

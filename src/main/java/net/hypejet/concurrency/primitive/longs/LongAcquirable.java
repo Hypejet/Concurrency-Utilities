@@ -2,6 +2,9 @@ package net.hypejet.concurrency.primitive.longs;
 
 import net.hypejet.concurrency.Acquirable;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.Objects;
 
 /**
  * Represents {@linkplain Acquirable an acquirable}, which guards a long.
@@ -9,7 +12,7 @@ import org.jetbrains.annotations.NotNull;
  * @since 1.0
  * @see Acquirable
  */
-public final class LongAcquirable extends Acquirable<LongAcquisition> {
+public final class LongAcquirable extends Acquirable<LongAcquisition, WriteLongAcquisition> {
 
     private long value;
 
@@ -33,53 +36,36 @@ public final class LongAcquirable extends Acquirable<LongAcquisition> {
         this.value = value;
     }
 
-    /**
-     * Creates {@linkplain LongAcquisition a long acquisition} of a long held by this
-     * {@linkplain LongAcquirable long acquirable} that supports read-only operations.
-     *
-     * <p>If the caller thread has already created an acquisition a special implementation is used, which reuses it,
-     * does nothing when {@link LongAcquisition#close()} is called and always returns {@code true} when
-     * {@link LongAcquisition#isUnlocked()} is called.</p>
-     *
-     * <p>If the acquisition needs to be unlocked the already existing acquisition needs to be used to do that.</p>
-     *
-     * @return the acquisition
-     * @since 1.0
-     */
     @Override
-    public @NotNull LongAcquisition acquireRead() {
-        LongAcquisition foundAcquisition = this.findAcquisition();
-        if (foundAcquisition != null)
-            return new ReusedLongAcquisition<>(foundAcquisition);
+    protected @NotNull LongAcquisition createReadAcquisition() {
         return new LongAcquisitionImpl(this);
     }
 
-    /**
-     * Creates {@linkplain WriteLongAcquisition a write long acquisition} of a long held by
-     * this {@linkplain LongAcquirable long acquirable} that supports write operations.
-     *
-     * <p>If the caller thread has already created a write acquisition a special implementation is used, which
-     * reuses it, does nothing when {@link LongAcquisition#close()} is called and always returns {@code true} when
-     * {@link LongAcquisition#isUnlocked()} is called.</p>
-     *
-     * <p>If the acquisition needs to be unlocked the already existing acquisition needs to be used to do that.</p>
-     *
-     * @return the acquisition
-     * @since 1.0
-     * @throws IllegalArgumentException if the caller thread has already created an acquisition, but it is not a write
-     *                                  acquisition
-     */
     @Override
-    public @NotNull WriteLongAcquisition acquireWrite() {
-        LongAcquisition foundAcquisition = this.findAcquisition();
-        if (foundAcquisition == null)
-            return new WriteLongAcquisitionImpl(this);
+    protected @NotNull WriteLongAcquisition createWriteAcquisition() {
+        return new WriteLongAcquisitionImpl(this);
+    }
 
-        if (!(foundAcquisition instanceof WriteLongAcquisition writeAcquisition)) {
-            throw new IllegalArgumentException("The caller thread has already created an acquisition," +
-                    " but it is not a write acquisition");
-        }
-        return new ReusedWriteLongAcquisition(writeAcquisition);
+    @Override
+    protected @NotNull LongAcquisition reuseReadAcquisition(@NotNull LongAcquisition originalAcquisition) {
+        return new ReusedLongAcquisition<>(originalAcquisition);
+    }
+
+    @Override
+    protected @NotNull WriteLongAcquisition reuseWriteAcquisition(@NotNull WriteLongAcquisition originalAcquisition) {
+        return new ReusedWriteLongAcquisition(originalAcquisition);
+    }
+
+    @Override
+    protected @NotNull WriteLongAcquisition createUpgradedAcquisition(@NotNull LongAcquisition originalAcquisition) {
+        return new UpgradedLongAcquisition(originalAcquisition, this);
+    }
+
+    @Override
+    protected @Nullable WriteLongAcquisition castToWriteAcquisition(@NotNull LongAcquisition acquisition) {
+        if (acquisition instanceof WriteLongAcquisition castAcquisition)
+            return castAcquisition;
+        return null;
     }
 
     /**
@@ -109,7 +95,7 @@ public final class LongAcquirable extends Acquirable<LongAcquisition> {
      * @see AbstractLongAcquisition
      */
     private static final class WriteLongAcquisitionImpl extends AbstractLongAcquisition
-            implements WriteLongAcquisition {
+            implements WriteLongAcquisition, SetOperationImplementation {
         /**
          * Constructs the {@linkplain WriteLongAcquisitionImpl write long acquisition implementation}.
          *
@@ -122,9 +108,8 @@ public final class LongAcquirable extends Acquirable<LongAcquisition> {
         }
 
         @Override
-        public void set(long value) {
-            this.ensurePermittedAndLocked();
-            this.acquirable.value = value;
+        public @NotNull LongAcquirable acquirable() {
+            return this.acquirable;
         }
     }
 
@@ -159,6 +144,38 @@ public final class LongAcquirable extends Acquirable<LongAcquisition> {
         @Override
         protected final @NotNull LongAcquisition cast() {
             return this;
+        }
+    }
+
+    /**
+     * Represents {@linkplain ReusedLongAcquisition a reused long acquisition}, which reuses
+     * {@linkplain LongAcquisition a long acquisition}, whose lock has been upgraded to a write lock.
+     *
+     * @since 1.0
+     * @see LongAcquisition
+     * @see ReusedLongAcquisition
+     */
+    private static final class UpgradedLongAcquisition extends ReusedLongAcquisition<LongAcquisition>
+            implements WriteLongAcquisition, SetOperationImplementation {
+
+        private final LongAcquirable acquirable;
+
+        /**
+         * Constructs the {@linkplain UpgradedLongAcquisition upgraded long acquisition}.
+         *
+         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param acquirable an acquirable that owns the original acquisition
+         * @since 1.0
+         */
+        private UpgradedLongAcquisition(@NotNull LongAcquisition originalAcquisition,
+                                        @NotNull LongAcquirable acquirable) {
+            super(originalAcquisition);
+            this.acquirable = Objects.requireNonNull(acquirable, "The acquirable must not be null");
+        }
+
+        @Override
+        public @NotNull LongAcquirable acquirable() {
+            return this.acquirable;
         }
     }
 
@@ -215,5 +232,28 @@ public final class LongAcquirable extends Acquirable<LongAcquisition> {
         public final long get() {
             return this.originalAcquisition.get();
         }
+    }
+
+    /**
+     * Represents {@linkplain WriteLongAcquisition a write long acquisition} with
+     * the {@linkplain WriteLongAcquisition#set(long) set operation} implemented.
+     *
+     * @since 1.0
+     * @see WriteLongAcquisition
+     */
+    private interface SetOperationImplementation extends WriteLongAcquisition {
+        @Override
+        default void set(long value) {
+            this.ensurePermittedAndLocked();
+            this.acquirable().value = value;
+        }
+
+        /**
+         * Gets {@linkplain LongAcquirable a long acquirable} that owns this acquisition.
+         *
+         * @return the long acquirable
+         * @since 1.0
+         */
+        @NotNull LongAcquirable acquirable();
     }
 }

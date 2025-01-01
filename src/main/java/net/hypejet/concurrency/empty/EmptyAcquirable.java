@@ -1,7 +1,9 @@
 package net.hypejet.concurrency.empty;
 
 import net.hypejet.concurrency.Acquirable;
+import net.hypejet.concurrency.Acquisition;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Represents {@linkplain Acquirable an acquirable}, which does not contain any state.
@@ -9,54 +11,37 @@ import org.jetbrains.annotations.NotNull;
  * @since 1.0
  * @see Acquirable
  */
-public final class EmptyAcquirable extends Acquirable<EmptyAcquisition> {
-    /**
-     * Creates {@linkplain EmptyAcquisition an empty acquisition} of this {@linkplain EmptyAcquirable empty acquirable}
-     * that supports read-only operations.
-     *
-     * <p>If the caller thread has already created an acquisition a special implementation is used, which reuses it,
-     * does nothing when {@link EmptyAcquisition#close()} is called and always returns {@code true} when
-     * {@link EmptyAcquisition#isUnlocked()} is called.</p>
-     *
-     * <p>If the acquisition needs to be unlocked the already existing acquisition needs to be used to do that.</p>
-     *
-     * @return the acquisition
-     * @since 1.0
-     */
+public final class EmptyAcquirable extends Acquirable<EmptyAcquisition, EmptyAcquisition> {
     @Override
-    public @NotNull EmptyAcquisition acquireRead() {
-        EmptyAcquisition foundAcquisition = this.findAcquisition();
-        if (foundAcquisition != null)
-            return new ReusedEmptyAcquisition(foundAcquisition);
+    protected @NotNull EmptyAcquisition createReadAcquisition() {
         return new ReadEmptyAcquisition(this);
     }
 
-    /**
-     * Creates {@linkplain EmptyAcquisition an empty acquisition} of this {@linkplain EmptyAcquirable empty acquirable}
-     * that supports write operations.
-     *
-     * <p>If the caller thread has already created a write acquisition a special implementation is used, which
-     * reuses it, does nothing when {@link EmptyAcquisition#close()} is called and always returns {@code true} when
-     * {@link EmptyAcquisition#isUnlocked()} is called.</p>
-     *
-     * <p>If the acquisition needs to be unlocked the already existing acquisition needs to be used to do that.</p>
-     *
-     * @return the acquisition
-     * @since 1.0
-     * @throws IllegalArgumentException if the caller thread has already created an acquisition, but it is not a write
-     *                                  acquisition
-     */
     @Override
-    public @NotNull EmptyAcquisition acquireWrite() {
-        EmptyAcquisition foundAcquisition = this.findAcquisition();
-        if (foundAcquisition == null)
-            return new WriteEmptyAcquisition(this);
+    protected @NotNull EmptyAcquisition createWriteAcquisition() {
+        return new WriteEmptyAcquisition(this);
+    }
 
-        if (!(foundAcquisition instanceof WriteEmptyAcquisition writeAcquisition)) {
-            throw new IllegalArgumentException("The caller thread has already created an acquisition," +
-                    " but it is not a write acquisition");
-        }
-        return new ReusedEmptyAcquisition(writeAcquisition);
+    @Override
+    protected @NotNull EmptyAcquisition reuseReadAcquisition(@NotNull EmptyAcquisition originalAcquisition) {
+        return new ReusedEmptyAcquisition(originalAcquisition);
+    }
+
+    @Override
+    protected @NotNull EmptyAcquisition reuseWriteAcquisition(@NotNull EmptyAcquisition originalAcquisition) {
+        return new ReusedEmptyAcquisition(originalAcquisition);
+    }
+
+    @Override
+    protected @NotNull EmptyAcquisition createUpgradedAcquisition(@NotNull EmptyAcquisition originalAcquisition) {
+        return originalAcquisition;
+    }
+
+    @Override
+    protected @Nullable EmptyAcquisition castToWriteAcquisition(@NotNull EmptyAcquisition acquisition) {
+        if (acquisition.acquisitionType() == Acquisition.AcquisitionType.WRITE)
+            return acquisition;
+        return null;
     }
 
     /**

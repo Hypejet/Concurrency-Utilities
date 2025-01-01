@@ -2,6 +2,9 @@ package net.hypejet.concurrency.primitive.character;
 
 import net.hypejet.concurrency.Acquirable;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.Objects;
 
 /**
  * Represents {@linkplain Acquirable an acquirable}, which guards a character.
@@ -9,7 +12,7 @@ import org.jetbrains.annotations.NotNull;
  * @since 1.0
  * @see Acquirable
  */
-public final class CharacterAcquirable extends Acquirable<CharacterAcquisition> {
+public final class CharacterAcquirable extends Acquirable<CharacterAcquisition, WriteCharacterAcquisition> {
 
     private char value;
 
@@ -23,53 +26,40 @@ public final class CharacterAcquirable extends Acquirable<CharacterAcquisition> 
         this.value = value;
     }
 
-    /**
-     * Creates {@linkplain CharacterAcquisition a character acquisition} of a character held by this
-     * {@linkplain CharacterAcquirable character acquirable} that supports read-only operations.
-     *
-     * <p>If the caller thread has already created an acquisition a special implementation is used, which reuses it,
-     * does nothing when {@link CharacterAcquisition#close()} is called and always returns {@code true} when
-     * {@link CharacterAcquisition#isUnlocked()} is called.</p>
-     *
-     * <p>If the acquisition needs to be unlocked the already existing acquisition needs to be used to do that.</p>
-     *
-     * @return the acquisition
-     * @since 1.0
-     */
     @Override
-    public @NotNull CharacterAcquisition acquireRead() {
-        CharacterAcquisition foundAcquisition = this.findAcquisition();
-        if (foundAcquisition != null)
-            return new ReusedCharacterAcquisition<>(foundAcquisition);
+    protected @NotNull CharacterAcquisition createReadAcquisition() {
         return new CharacterAcquisitionImpl(this);
     }
 
-    /**
-     * Creates {@linkplain WriteCharacterAcquisition a write character acquisition} of a character held by
-     * this {@linkplain CharacterAcquirable character acquirable} that supports write operations.
-     *
-     * <p>If the caller thread has already created a write acquisition a special implementation is used, which
-     * reuses it, does nothing when {@link CharacterAcquisition#close()} is called and always returns {@code true} when
-     * {@link CharacterAcquisition#isUnlocked()} is called.</p>
-     *
-     * <p>If the acquisition needs to be unlocked the already existing acquisition needs to be used to do that.</p>
-     *
-     * @return the acquisition
-     * @since 1.0
-     * @throws IllegalArgumentException if the caller thread has already created an acquisition, but it is not a write
-     *                                  acquisition
-     */
     @Override
-    public @NotNull WriteCharacterAcquisition acquireWrite() {
-        CharacterAcquisition foundAcquisition = this.findAcquisition();
-        if (foundAcquisition == null)
-            return new WriteCharacterAcquisitionImpl(this);
+    protected @NotNull WriteCharacterAcquisition createWriteAcquisition() {
+        return new WriteCharacterAcquisitionImpl(this);
+    }
 
-        if (!(foundAcquisition instanceof WriteCharacterAcquisition writeAcquisition)) {
-            throw new IllegalArgumentException("The caller thread has already created an acquisition," +
-                    " but it is not a write acquisition");
-        }
-        return new ReusedWriteCharacterAcquisition(writeAcquisition);
+    @Override
+    protected @NotNull CharacterAcquisition reuseReadAcquisition(@NotNull CharacterAcquisition originalAcquisition) {
+        return new ReusedCharacterAcquisition<>(originalAcquisition);
+    }
+
+    @Override
+    protected @NotNull WriteCharacterAcquisition reuseWriteAcquisition(
+            @NotNull WriteCharacterAcquisition originalAcquisition
+    ) {
+        return new ReusedWriteCharacterAcquisition(originalAcquisition);
+    }
+
+    @Override
+    protected @NotNull WriteCharacterAcquisition createUpgradedAcquisition(
+            @NotNull CharacterAcquisition originalAcquisition
+    ) {
+        return new UpgradedCharacterAcquisition(originalAcquisition, this);
+    }
+
+    @Override
+    protected @Nullable WriteCharacterAcquisition castToWriteAcquisition(@NotNull CharacterAcquisition acquisition) {
+        if (acquisition instanceof WriteCharacterAcquisition castAcquisition)
+            return castAcquisition;
+        return null;
     }
 
     /**
@@ -99,7 +89,7 @@ public final class CharacterAcquirable extends Acquirable<CharacterAcquisition> 
      * @see AbstractCharacterAcquisition
      */
     private static final class WriteCharacterAcquisitionImpl extends AbstractCharacterAcquisition
-            implements WriteCharacterAcquisition {
+            implements WriteCharacterAcquisition, SetOperationImplementation {
         /**
          * Constructs the {@linkplain WriteCharacterAcquisitionImpl write character acquisition implementation}.
          *
@@ -112,9 +102,8 @@ public final class CharacterAcquirable extends Acquirable<CharacterAcquisition> 
         }
 
         @Override
-        public void set(char value) {
-            this.ensurePermittedAndLocked();
-            this.acquirable.value = value;
+        public @NotNull CharacterAcquirable acquirable() {
+            return this.acquirable;
         }
     }
 
@@ -150,6 +139,38 @@ public final class CharacterAcquirable extends Acquirable<CharacterAcquisition> 
         @Override
         protected final @NotNull CharacterAcquisition cast() {
             return this;
+        }
+    }
+
+    /**
+     * Represents {@linkplain ReusedCharacterAcquisition a reused character acquisition}, which reuses
+     * {@linkplain CharacterAcquisition a character acquisition}, whose lock has been upgraded to a write lock.
+     *
+     * @since 1.0
+     * @see CharacterAcquisition
+     * @see ReusedCharacterAcquisition
+     */
+    private static final class UpgradedCharacterAcquisition extends ReusedCharacterAcquisition<CharacterAcquisition>
+            implements WriteCharacterAcquisition, SetOperationImplementation {
+
+        private final CharacterAcquirable acquirable;
+
+        /**
+         * Constructs the {@linkplain UpgradedCharacterAcquisition upgraded character acquisition}.
+         *
+         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param acquirable an acquirable that owns the original acquisition
+         * @since 1.0
+         */
+        private UpgradedCharacterAcquisition(@NotNull CharacterAcquisition originalAcquisition,
+                                             @NotNull CharacterAcquirable acquirable) {
+            super(originalAcquisition);
+            this.acquirable = Objects.requireNonNull(acquirable, "The acquirable must not be null");
+        }
+
+        @Override
+        public @NotNull CharacterAcquirable acquirable() {
+            return this.acquirable;
         }
     }
 
@@ -207,5 +228,28 @@ public final class CharacterAcquirable extends Acquirable<CharacterAcquisition> 
         public final char get() {
             return this.originalAcquisition.get();
         }
+    }
+
+    /**
+     * Represents {@linkplain WriteCharacterAcquisition a write character acquisition} with
+     * the {@linkplain WriteCharacterAcquisition#set(char) set operation} implemented.
+     *
+     * @since 1.0
+     * @see WriteCharacterAcquisition
+     */
+    private interface SetOperationImplementation extends WriteCharacterAcquisition {
+        @Override
+        default void set(char value) {
+            this.ensurePermittedAndLocked();
+            this.acquirable().value = value;
+        }
+
+        /**
+         * Gets {@linkplain CharacterAcquirable a character acquirable} that owns this acquisition.
+         *
+         * @return the character acquirable
+         * @since 1.0
+         */
+        @NotNull CharacterAcquirable acquirable();
     }
 }

@@ -2,6 +2,9 @@ package net.hypejet.concurrency.primitive.shorts;
 
 import net.hypejet.concurrency.Acquirable;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.Objects;
 
 /**
  * Represents {@linkplain Acquirable an acquirable}, which guards a short.
@@ -9,7 +12,7 @@ import org.jetbrains.annotations.NotNull;
  * @since 1.0
  * @see Acquirable
  */
-public final class ShortAcquirable extends Acquirable<ShortAcquisition> {
+public final class ShortAcquirable extends Acquirable<ShortAcquisition, WriteShortAcquisition> {
 
     private short value;
 
@@ -33,53 +36,38 @@ public final class ShortAcquirable extends Acquirable<ShortAcquisition> {
         this.value = value;
     }
 
-    /**
-     * Creates {@linkplain ShortAcquisition a short acquisition} of a short held by this
-     * {@linkplain ShortAcquirable short acquirable} that supports read-only operations.
-     *
-     * <p>If the caller thread has already created an acquisition a special implementation is used, which reuses it,
-     * does nothing when {@link ShortAcquisition#close()} is called and always returns {@code true} when
-     * {@link ShortAcquisition#isUnlocked()} is called.</p>
-     *
-     * <p>If the acquisition needs to be unlocked the already existing acquisition needs to be used to do that.</p>
-     *
-     * @return the acquisition
-     * @since 1.0
-     */
     @Override
-    public @NotNull ShortAcquisition acquireRead() {
-        ShortAcquisition foundAcquisition = this.findAcquisition();
-        if (foundAcquisition != null)
-            return new ReusedShortAcquisition<>(foundAcquisition);
+    protected @NotNull ShortAcquisition createReadAcquisition() {
         return new ShortAcquisitionImpl(this);
     }
 
-    /**
-     * Creates {@linkplain WriteShortAcquisition a write short acquisition} of a short held by
-     * this {@linkplain ShortAcquirable short acquirable} that supports write operations.
-     *
-     * <p>If the caller thread has already created a write acquisition a special implementation is used, which
-     * reuses it, does nothing when {@link ShortAcquisition#close()} is called and always returns {@code true} when
-     * {@link ShortAcquisition#isUnlocked()} is called.</p>
-     *
-     * <p>If the acquisition needs to be unlocked the already existing acquisition needs to be used to do that.</p>
-     *
-     * @return the acquisition
-     * @since 1.0
-     * @throws IllegalArgumentException if the caller thread has already created an acquisition, but it is not a write
-     *                                  acquisition
-     */
     @Override
-    public @NotNull WriteShortAcquisition acquireWrite() {
-        ShortAcquisition foundAcquisition = this.findAcquisition();
-        if (foundAcquisition == null)
-            return new WriteShortAcquisitionImpl(this);
+    protected @NotNull WriteShortAcquisition createWriteAcquisition() {
+        return new WriteShortAcquisitionImpl(this);
+    }
 
-        if (!(foundAcquisition instanceof WriteShortAcquisition writeAcquisition)) {
-            throw new IllegalArgumentException("The caller thread has already created an acquisition," +
-                    " but it is not a write acquisition");
-        }
-        return new ReusedWriteShortAcquisition(writeAcquisition);
+    @Override
+    protected @NotNull ShortAcquisition reuseReadAcquisition(@NotNull ShortAcquisition originalAcquisition) {
+        return new ReusedShortAcquisition<>(originalAcquisition);
+    }
+
+    @Override
+    protected @NotNull WriteShortAcquisition reuseWriteAcquisition(
+            @NotNull WriteShortAcquisition originalAcquisition
+    ) {
+        return new ReusedWriteShortAcquisition(originalAcquisition);
+    }
+
+    @Override
+    protected @NotNull WriteShortAcquisition createUpgradedAcquisition(@NotNull ShortAcquisition originalAcquisition) {
+        return new UpgradedShortAcquisition(originalAcquisition, this);
+    }
+
+    @Override
+    protected @Nullable WriteShortAcquisition castToWriteAcquisition(@NotNull ShortAcquisition acquisition) {
+        if (acquisition instanceof WriteShortAcquisition castAcquisition)
+            return castAcquisition;
+        return null;
     }
 
     /**
@@ -109,7 +97,7 @@ public final class ShortAcquirable extends Acquirable<ShortAcquisition> {
      * @see AbstractShortAcquisition
      */
     private static final class WriteShortAcquisitionImpl extends AbstractShortAcquisition
-            implements WriteShortAcquisition {
+            implements WriteShortAcquisition, SetOperationImplementation {
         /**
          * Constructs the {@linkplain WriteShortAcquisitionImpl write short acquisition implementation}.
          *
@@ -122,9 +110,40 @@ public final class ShortAcquirable extends Acquirable<ShortAcquisition> {
         }
 
         @Override
-        public void set(short value) {
-            this.ensurePermittedAndLocked();
-            this.acquirable.value = value;
+        public @NotNull ShortAcquirable acquirable() {
+            return this.acquirable;
+        }
+    }
+
+    /**
+     * Represents {@linkplain ReusedShortAcquisition a reused short acquisition}, which reuses
+     * {@linkplain ShortAcquisition a short acquisition}, whose lock has been upgraded to a write lock.
+     *
+     * @since 1.0
+     * @see ShortAcquisition
+     * @see ReusedShortAcquisition
+     */
+    private static final class UpgradedShortAcquisition extends ReusedShortAcquisition<ShortAcquisition>
+            implements WriteShortAcquisition, SetOperationImplementation {
+
+        private final ShortAcquirable acquirable;
+
+        /**
+         * Constructs the {@linkplain UpgradedShortAcquisition upgraded short acquisition}.
+         *
+         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param acquirable an acquirable that owns the original acquisition
+         * @since 1.0
+         */
+        private UpgradedShortAcquisition(@NotNull ShortAcquisition originalAcquisition,
+                                         @NotNull ShortAcquirable acquirable) {
+            super(originalAcquisition);
+            this.acquirable = Objects.requireNonNull(acquirable, "The acquirable must not be null");
+        }
+
+        @Override
+        public @NotNull ShortAcquirable acquirable() {
+            return this.acquirable;
         }
     }
 
@@ -215,5 +234,28 @@ public final class ShortAcquirable extends Acquirable<ShortAcquisition> {
         public final short get() {
             return this.originalAcquisition.get();
         }
+    }
+
+    /**
+     * Represents {@linkplain WriteShortAcquisition a write short acquisition} with
+     * the {@linkplain WriteShortAcquisition#set(short) set operation} implemented.
+     *
+     * @since 1.0
+     * @see WriteShortAcquisition
+     */
+    private interface SetOperationImplementation extends WriteShortAcquisition {
+        @Override
+        default void set(short value) {
+            this.ensurePermittedAndLocked();
+            this.acquirable().value = value;
+        }
+
+        /**
+         * Gets {@linkplain ShortAcquirable a short acquirable} that owns this acquisition.
+         *
+         * @return the short acquirable
+         * @since 1.0
+         */
+        @NotNull ShortAcquirable acquirable();
     }
 }

@@ -2,6 +2,9 @@ package net.hypejet.concurrency.primitive.integer;
 
 import net.hypejet.concurrency.Acquirable;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.Objects;
 
 /**
  * Represents {@linkplain Acquirable an acquirable}, which guards an integer.
@@ -9,7 +12,7 @@ import org.jetbrains.annotations.NotNull;
  * @since 1.0
  * @see Acquirable
  */
-public final class IntegerAcquirable extends Acquirable<IntegerAcquisition> {
+public final class IntegerAcquirable extends Acquirable<IntegerAcquisition, WriteIntegerAcquisition> {
 
     private int value;
 
@@ -33,53 +36,40 @@ public final class IntegerAcquirable extends Acquirable<IntegerAcquisition> {
         this.value = value;
     }
 
-    /**
-     * Creates {@linkplain IntegerAcquisition an integer acquisition} of an integer held by this
-     * {@linkplain IntegerAcquirable integer acquirable} that supports read-only operations.
-     *
-     * <p>If the caller thread has already created an acquisition a special implementation is used, which reuses it,
-     * does nothing when {@link IntegerAcquisition#close()} is called and always returns {@code true} when
-     * {@link IntegerAcquisition#isUnlocked()} is called.</p>
-     *
-     * <p>If the acquisition needs to be unlocked the already existing acquisition needs to be used to do that.</p>
-     *
-     * @return the acquisition
-     * @since 1.0
-     */
     @Override
-    public @NotNull IntegerAcquisition acquireRead() {
-        IntegerAcquisition foundAcquisition = this.findAcquisition();
-        if (foundAcquisition != null)
-            return new ReusedIntegerAcquisition<>(foundAcquisition);
+    protected @NotNull IntegerAcquisition createReadAcquisition() {
         return new IntegerAcquisitionImpl(this);
     }
 
-    /**
-     * Creates {@linkplain WriteIntegerAcquisition a write integer acquisition} of an integer held by
-     * this {@linkplain IntegerAcquirable integer acquirable} that supports write operations.
-     *
-     * <p>If the caller thread has already created a write acquisition a special implementation is used, which
-     * reuses it, does nothing when {@link IntegerAcquisition#close()} is called and always returns {@code true} when
-     * {@link IntegerAcquisition#isUnlocked()} is called.</p>
-     *
-     * <p>If the acquisition needs to be unlocked the already existing acquisition needs to be used to do that.</p>
-     *
-     * @return the acquisition
-     * @since 1.0
-     * @throws IllegalArgumentException if the caller thread has already created an acquisition, but it is not a write
-     *                                  acquisition
-     */
     @Override
-    public @NotNull WriteIntegerAcquisition acquireWrite() {
-        IntegerAcquisition foundAcquisition = this.findAcquisition();
-        if (foundAcquisition == null)
-            return new WriteIntegerAcquisitionImpl(this);
+    protected @NotNull WriteIntegerAcquisition createWriteAcquisition() {
+        return new WriteIntegerAcquisitionImpl(this);
+    }
 
-        if (!(foundAcquisition instanceof WriteIntegerAcquisition writeAcquisition)) {
-            throw new IllegalArgumentException("The caller thread has already created an acquisition," +
-                    " but it is not a write acquisition");
-        }
-        return new ReusedWriteIntegerAcquisition(writeAcquisition);
+    @Override
+    protected @NotNull IntegerAcquisition reuseReadAcquisition(@NotNull IntegerAcquisition originalAcquisition) {
+        return new ReusedIntegerAcquisition<>(originalAcquisition);
+    }
+
+    @Override
+    protected @NotNull WriteIntegerAcquisition reuseWriteAcquisition(
+            @NotNull WriteIntegerAcquisition originalAcquisition
+    ) {
+        return new ReusedWriteIntegerAcquisition(originalAcquisition);
+    }
+
+    @Override
+    protected @NotNull WriteIntegerAcquisition createUpgradedAcquisition(
+            @NotNull IntegerAcquisition originalAcquisition
+    ) {
+        return new UpgradedIntegerAcquisition(originalAcquisition, this);
+    }
+
+    @Override
+    protected @Nullable WriteIntegerAcquisition castToWriteAcquisition(@NotNull IntegerAcquisition acquisition) {
+        if (acquisition instanceof WriteIntegerAcquisition castAcquisition)
+            return castAcquisition;
+        return null;
     }
 
     /**
@@ -109,7 +99,7 @@ public final class IntegerAcquirable extends Acquirable<IntegerAcquisition> {
      * @see AbstractIntegerAcquisition
      */
     private static final class WriteIntegerAcquisitionImpl extends AbstractIntegerAcquisition
-            implements WriteIntegerAcquisition {
+            implements WriteIntegerAcquisition, SetOperationImplementation {
         /**
          * Constructs the {@linkplain WriteIntegerAcquisitionImpl write integer acquisition implementation}.
          *
@@ -122,9 +112,8 @@ public final class IntegerAcquirable extends Acquirable<IntegerAcquisition> {
         }
 
         @Override
-        public void set(int value) {
-            this.ensurePermittedAndLocked();
-            this.acquirable.value = value;
+        public @NotNull IntegerAcquirable acquirable() {
+            return this.acquirable;
         }
     }
 
@@ -159,6 +148,38 @@ public final class IntegerAcquirable extends Acquirable<IntegerAcquisition> {
         @Override
         protected final @NotNull IntegerAcquisition cast() {
             return this;
+        }
+    }
+
+    /**
+     * Represents {@linkplain ReusedIntegerAcquisition a reused integer acquisition}, which reuses
+     * {@linkplain IntegerAcquisition an integer acquisition}, whose lock has been upgraded to a write lock.
+     *
+     * @since 1.0
+     * @see IntegerAcquisition
+     * @see ReusedIntegerAcquisition
+     */
+    private static final class UpgradedIntegerAcquisition extends ReusedIntegerAcquisition<IntegerAcquisition>
+            implements WriteIntegerAcquisition, SetOperationImplementation {
+
+        private final IntegerAcquirable acquirable;
+
+        /**
+         * Constructs the {@linkplain UpgradedIntegerAcquisition upgraded integer acquisition}.
+         *
+         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param acquirable an acquirable that owns the original acquisition
+         * @since 1.0
+         */
+        private UpgradedIntegerAcquisition(@NotNull IntegerAcquisition originalAcquisition,
+                                           @NotNull IntegerAcquirable acquirable) {
+            super(originalAcquisition);
+            this.acquirable = Objects.requireNonNull(acquirable, "The acquirable must not be null");
+        }
+
+        @Override
+        public @NotNull IntegerAcquirable acquirable() {
+            return this.acquirable;
         }
     }
 
@@ -215,5 +236,28 @@ public final class IntegerAcquirable extends Acquirable<IntegerAcquisition> {
         public final int get() {
             return this.originalAcquisition.get();
         }
+    }
+
+    /**
+     * Represents {@linkplain WriteIntegerAcquisition a write integer acquisition} with
+     * the {@linkplain WriteIntegerAcquisition#set(int) set operation} implemented.
+     *
+     * @since 1.0
+     * @see WriteIntegerAcquisition
+     */
+    private interface SetOperationImplementation extends WriteIntegerAcquisition {
+        @Override
+        default void set(int value) {
+            this.ensurePermittedAndLocked();
+            this.acquirable().value = value;
+        }
+
+        /**
+         * Gets {@linkplain IntegerAcquirable an integer acquirable} that owns this acquisition.
+         *
+         * @return the integer acquirable
+         * @since 1.0
+         */
+        @NotNull IntegerAcquirable acquirable();
     }
 }

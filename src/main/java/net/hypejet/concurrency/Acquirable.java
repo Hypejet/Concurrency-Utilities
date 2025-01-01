@@ -31,11 +31,12 @@ public abstract class Acquirable<A extends Acquisition, WA extends A> {
      * Creates {@linkplain A an acquisition} of state held by this {@linkplain Acquirable acquirable} that supports
      * read-only operations.
      *
-     * <p>If the caller thread has already created an acquisition a special implementation is used, which reuses it,
+     * <p>If the caller thread has already created an acquisition, a special implementation is used, which reuses it,
      * does nothing when {@link Acquisition#close()} is called and always returns {@code true} when
      * {@link Acquisition#isUnlocked()} is called.</p>
      *
-     * <p>If the acquisition needs to be unlocked the already existing acquisition needs to be used to do that.</p>
+     * <p>If the reused acquisition needs to be unlocked the already existing acquisition needs to be used to do
+     * that.</p>
      *
      * @return the acquisition
      * @since 1.0
@@ -64,16 +65,20 @@ public abstract class Acquirable<A extends Acquisition, WA extends A> {
      * Creates {@linkplain WA a write acquisition} of a state held by this {@linkplain Acquirable acquirable} that
      * supports write operations.
      *
-     * <p>If the caller thread has already created a write acquisition a special implementation is used, which
+     * <p>If the caller thread has already created a write acquisition, a special implementation is used, which
      * reuses it, does nothing when {@link Acquisition#close()} is called and always returns {@code true} when
      * {@link Acquisition#isUnlocked()} is called.</p>
      *
-     * <p>If the acquisition needs to be unlocked the already existing acquisition needs to be used to do that.</p>
+     * <p>If the caller thread has already created a read acquisition, lock of the read acquisition is upgraded to
+     * a write lock and a special implementation is used, which reuses the read acquisition, does nothing when
+     * {@link Acquisition#close()} is called and always returns {@code true} when {@link Acquisition#isUnlocked()}
+     * is called.</p>
+     *
+     * <p>If the reused acquisition needs to be unlocked the already existing acquisition needs to be used to do
+     * that.</p>
      *
      * @return the acquisition
      * @since 1.0
-     * @throws IllegalArgumentException if the caller thread has already created an acquisition, but it is not a write
-     *                                  acquisition
      */
     public final @NotNull WA acquireWrite() {
         try {

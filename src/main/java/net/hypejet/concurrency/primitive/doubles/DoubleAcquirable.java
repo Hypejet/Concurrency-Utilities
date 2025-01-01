@@ -2,6 +2,9 @@ package net.hypejet.concurrency.primitive.doubles;
 
 import net.hypejet.concurrency.Acquirable;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.Objects;
 
 /**
  * Represents {@linkplain Acquirable an acquirable}, which guards a double.
@@ -9,7 +12,7 @@ import org.jetbrains.annotations.NotNull;
  * @since 1.0
  * @see Acquirable
  */
-public final class DoubleAcquirable extends Acquirable<DoubleAcquisition> {
+public final class DoubleAcquirable extends Acquirable<DoubleAcquisition, WriteDoubleAcquisition> {
 
     private double value;
 
@@ -33,53 +36,40 @@ public final class DoubleAcquirable extends Acquirable<DoubleAcquisition> {
         this.value = value;
     }
 
-    /**
-     * Creates {@linkplain DoubleAcquisition a double acquisition} of a double held by this
-     * {@linkplain DoubleAcquirable double acquirable} that supports read-only operations.
-     *
-     * <p>If the caller thread has already created an acquisition a special implementation is used, which reuses it,
-     * does nothing when {@link DoubleAcquisition#close()} is called and always returns {@code true} when
-     * {@link DoubleAcquisition#isUnlocked()} is called.</p>
-     *
-     * <p>If the acquisition needs to be unlocked the already existing acquisition needs to be used to do that.</p>
-     *
-     * @return the acquisition
-     * @since 1.0
-     */
     @Override
-    public @NotNull DoubleAcquisition acquireRead() {
-        DoubleAcquisition foundAcquisition = this.findAcquisition();
-        if (foundAcquisition != null)
-            return new ReusedDoubleAcquisition<>(foundAcquisition);
+    protected @NotNull DoubleAcquisition createReadAcquisition() {
         return new DoubleAcquisitionImpl(this);
     }
 
-    /**
-     * Creates {@linkplain WriteDoubleAcquisition a write double acquisition} of a double held by
-     * this {@linkplain DoubleAcquirable double acquirable} that supports write operations.
-     *
-     * <p>If the caller thread has already created a write acquisition a special implementation is used, which
-     * reuses it, does nothing when {@link DoubleAcquisition#close()} is called and always returns {@code true} when
-     * {@link DoubleAcquisition#isUnlocked()} is called.</p>
-     *
-     * <p>If the acquisition needs to be unlocked the already existing acquisition needs to be used to do that.</p>
-     *
-     * @return the acquisition
-     * @since 1.0
-     * @throws IllegalArgumentException if the caller thread has already created an acquisition, but it is not a write
-     *                                  acquisition
-     */
     @Override
-    public @NotNull WriteDoubleAcquisition acquireWrite() {
-        DoubleAcquisition foundAcquisition = this.findAcquisition();
-        if (foundAcquisition == null)
-            return new WriteDoubleAcquisitionImpl(this);
+    protected @NotNull WriteDoubleAcquisition createWriteAcquisition() {
+        return new WriteDoubleAcquisitionImpl(this);
+    }
 
-        if (!(foundAcquisition instanceof WriteDoubleAcquisition writeAcquisition)) {
-            throw new IllegalArgumentException("The caller thread has already created an acquisition," +
-                    " but it is not a write acquisition");
-        }
-        return new ReusedWriteDoubleAcquisition(writeAcquisition);
+    @Override
+    protected @NotNull DoubleAcquisition reuseReadAcquisition(@NotNull DoubleAcquisition originalAcquisition) {
+        return new ReusedDoubleAcquisition<>(originalAcquisition);
+    }
+
+    @Override
+    protected @NotNull WriteDoubleAcquisition reuseWriteAcquisition(
+            @NotNull WriteDoubleAcquisition originalAcquisition
+    ) {
+        return new ReusedWriteDoubleAcquisition(originalAcquisition);
+    }
+
+    @Override
+    protected @NotNull WriteDoubleAcquisition createUpgradedAcquisition(
+            @NotNull DoubleAcquisition originalAcquisition
+    ) {
+        return new UpgradedDoubleAcquisition(originalAcquisition, this);
+    }
+
+    @Override
+    protected @Nullable WriteDoubleAcquisition castToWriteAcquisition(@NotNull DoubleAcquisition acquisition) {
+        if (acquisition instanceof WriteDoubleAcquisition castAcquisition)
+            return castAcquisition;
+        return null;
     }
 
     /**
@@ -109,7 +99,7 @@ public final class DoubleAcquirable extends Acquirable<DoubleAcquisition> {
      * @see AbstractDoubleAcquisition
      */
     private static final class WriteDoubleAcquisitionImpl extends AbstractDoubleAcquisition
-            implements WriteDoubleAcquisition {
+            implements WriteDoubleAcquisition, SetOperationImplementation {
         /**
          * Constructs the {@linkplain WriteDoubleAcquisitionImpl write double acquisition implementation}.
          *
@@ -122,9 +112,8 @@ public final class DoubleAcquirable extends Acquirable<DoubleAcquisition> {
         }
 
         @Override
-        public void set(double value) {
-            this.ensurePermittedAndLocked();
-            this.acquirable.value = value;
+        public @NotNull DoubleAcquirable acquirable() {
+            return this.acquirable;
         }
     }
 
@@ -160,6 +149,38 @@ public final class DoubleAcquirable extends Acquirable<DoubleAcquisition> {
         @Override
         protected final @NotNull DoubleAcquisition cast() {
             return this;
+        }
+    }
+
+    /**
+     * Represents {@linkplain ReusedDoubleAcquisition a reused double acquisition}, which reuses
+     * {@linkplain DoubleAcquisition a double acquisition}, whose lock has been upgraded to a write lock.
+     *
+     * @since 1.0
+     * @see DoubleAcquisition
+     * @see ReusedDoubleAcquisition
+     */
+    private static final class UpgradedDoubleAcquisition extends ReusedDoubleAcquisition<DoubleAcquisition>
+            implements WriteDoubleAcquisition, SetOperationImplementation {
+
+        private final DoubleAcquirable acquirable;
+
+        /**
+         * Constructs the {@linkplain UpgradedDoubleAcquisition upgraded double acquisition}.
+         *
+         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param acquirable an acquirable that owns the original acquisition
+         * @since 1.0
+         */
+        private UpgradedDoubleAcquisition(@NotNull DoubleAcquisition originalAcquisition,
+                                          @NotNull DoubleAcquirable acquirable) {
+            super(originalAcquisition);
+            this.acquirable = Objects.requireNonNull(acquirable, "The acquirable must not be null");
+        }
+
+        @Override
+        public @NotNull DoubleAcquirable acquirable() {
+            return this.acquirable;
         }
     }
 
@@ -216,5 +237,28 @@ public final class DoubleAcquirable extends Acquirable<DoubleAcquisition> {
         public final double get() {
             return this.originalAcquisition.get();
         }
+    }
+
+    /**
+     * Represents {@linkplain WriteDoubleAcquisition a write double acquisition} with
+     * the {@linkplain WriteDoubleAcquisition#set(double) set operation} implemented.
+     *
+     * @since 1.0
+     * @see WriteDoubleAcquisition
+     */
+    private interface SetOperationImplementation extends WriteDoubleAcquisition {
+        @Override
+        default void set(double value) {
+            this.ensurePermittedAndLocked();
+            this.acquirable().value = value;
+        }
+
+        /**
+         * Gets {@linkplain DoubleAcquirable a double acquirable} that owns this acquisition.
+         *
+         * @return the double acquirable
+         * @since 1.0
+         */
+        @NotNull DoubleAcquirable acquirable();
     }
 }

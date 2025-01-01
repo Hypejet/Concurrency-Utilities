@@ -2,6 +2,9 @@ package net.hypejet.concurrency.primitive.floats;
 
 import net.hypejet.concurrency.Acquirable;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.Objects;
 
 /**
  * Represents {@linkplain Acquirable an acquirable}, which guards a float.
@@ -9,7 +12,7 @@ import org.jetbrains.annotations.NotNull;
  * @since 1.0
  * @see Acquirable
  */
-public final class FloatAcquirable extends Acquirable<FloatAcquisition> {
+public final class FloatAcquirable extends Acquirable<FloatAcquisition, WriteFloatAcquisition> {
 
     private float value;
 
@@ -33,53 +36,38 @@ public final class FloatAcquirable extends Acquirable<FloatAcquisition> {
         this.value = value;
     }
 
-    /**
-     * Creates {@linkplain FloatAcquisition a float acquisition} of a float held by this
-     * {@linkplain FloatAcquirable float acquirable} that supports read-only operations.
-     *
-     * <p>If the caller thread has already created an acquisition a special implementation is used, which reuses it,
-     * does nothing when {@link FloatAcquisition#close()} is called and always returns {@code true} when
-     * {@link FloatAcquisition#isUnlocked()} is called.</p>
-     *
-     * <p>If the acquisition needs to be unlocked the already existing acquisition needs to be used to do that.</p>
-     *
-     * @return the acquisition
-     * @since 1.0
-     */
     @Override
-    public @NotNull FloatAcquisition acquireRead() {
-        FloatAcquisition foundAcquisition = this.findAcquisition();
-        if (foundAcquisition != null)
-            return new ReusedFloatAcquisition<>(foundAcquisition);
+    protected @NotNull FloatAcquisition createReadAcquisition() {
         return new FloatAcquisitionImpl(this);
     }
 
-    /**
-     * Creates {@linkplain WriteFloatAcquisition a write float acquisition} of a float held by
-     * this {@linkplain FloatAcquirable float acquirable} that supports write operations.
-     *
-     * <p>If the caller thread has already created a write acquisition a special implementation is used, which
-     * reuses it, does nothing when {@link FloatAcquisition#close()} is called and always returns {@code true} when
-     * {@link FloatAcquisition#isUnlocked()} is called.</p>
-     *
-     * <p>If the acquisition needs to be unlocked the already existing acquisition needs to be used to do that.</p>
-     *
-     * @return the acquisition
-     * @since 1.0
-     * @throws IllegalArgumentException if the caller thread has already created an acquisition, but it is not a write
-     *                                  acquisition
-     */
     @Override
-    public @NotNull WriteFloatAcquisition acquireWrite() {
-        FloatAcquisition foundAcquisition = this.findAcquisition();
-        if (foundAcquisition == null)
-            return new WriteFloatAcquisitionImpl(this);
+    protected @NotNull WriteFloatAcquisition createWriteAcquisition() {
+        return new WriteFloatAcquisitionImpl(this);
+    }
 
-        if (!(foundAcquisition instanceof WriteFloatAcquisition writeAcquisition)) {
-            throw new IllegalArgumentException("The caller thread has already created an acquisition," +
-                    " but it is not a write acquisition");
-        }
-        return new ReusedWriteFloatAcquisition(writeAcquisition);
+    @Override
+    protected @NotNull FloatAcquisition reuseReadAcquisition(@NotNull FloatAcquisition originalAcquisition) {
+        return new ReusedFloatAcquisition<>(originalAcquisition);
+    }
+
+    @Override
+    protected @NotNull WriteFloatAcquisition reuseWriteAcquisition(
+            @NotNull WriteFloatAcquisition originalAcquisition
+    ) {
+        return new ReusedWriteFloatAcquisition(originalAcquisition);
+    }
+
+    @Override
+    protected @NotNull WriteFloatAcquisition createUpgradedAcquisition(@NotNull FloatAcquisition originalAcquisition) {
+        return new UpgradedFloatAcquisition(originalAcquisition, this);
+    }
+
+    @Override
+    protected @Nullable WriteFloatAcquisition castToWriteAcquisition(@NotNull FloatAcquisition acquisition) {
+        if (acquisition instanceof WriteFloatAcquisition castAcquisition)
+            return castAcquisition;
+        return null;
     }
 
     /**
@@ -109,7 +97,7 @@ public final class FloatAcquirable extends Acquirable<FloatAcquisition> {
      * @see AbstractFloatAcquisition
      */
     private static final class WriteFloatAcquisitionImpl extends AbstractFloatAcquisition
-            implements WriteFloatAcquisition {
+            implements WriteFloatAcquisition, SetOperationImplementation {
         /**
          * Constructs the {@linkplain WriteFloatAcquisitionImpl write float acquisition implementation}.
          *
@@ -122,9 +110,8 @@ public final class FloatAcquirable extends Acquirable<FloatAcquisition> {
         }
 
         @Override
-        public void set(float value) {
-            this.ensurePermittedAndLocked();
-            this.acquirable.value = value;
+        public @NotNull FloatAcquirable acquirable() {
+            return this.acquirable;
         }
     }
 
@@ -160,6 +147,38 @@ public final class FloatAcquirable extends Acquirable<FloatAcquisition> {
         @Override
         protected final @NotNull FloatAcquisition cast() {
             return this;
+        }
+    }
+
+    /**
+     * Represents {@linkplain ReusedFloatAcquisition a reused float acquisition}, which reuses
+     * {@linkplain FloatAcquisition a float acquisition}, whose lock has been upgraded to a write lock.
+     *
+     * @since 1.0
+     * @see FloatAcquisition
+     * @see ReusedFloatAcquisition
+     */
+    private static final class UpgradedFloatAcquisition extends ReusedFloatAcquisition<FloatAcquisition>
+            implements WriteFloatAcquisition, SetOperationImplementation {
+
+        private final FloatAcquirable acquirable;
+
+        /**
+         * Constructs the {@linkplain UpgradedFloatAcquisition upgraded float acquisition}.
+         *
+         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param acquirable an acquirable that owns the original acquisition
+         * @since 1.0
+         */
+        private UpgradedFloatAcquisition(@NotNull FloatAcquisition originalAcquisition,
+                                         @NotNull FloatAcquirable acquirable) {
+            super(originalAcquisition);
+            this.acquirable = Objects.requireNonNull(acquirable, "The acquirable must not be null");
+        }
+
+        @Override
+        public @NotNull FloatAcquirable acquirable() {
+            return this.acquirable;
         }
     }
 
@@ -216,5 +235,28 @@ public final class FloatAcquirable extends Acquirable<FloatAcquisition> {
         public final float get() {
             return this.originalAcquisition.get();
         }
+    }
+
+    /**
+     * Represents {@linkplain WriteFloatAcquisition a write float acquisition} with
+     * the {@linkplain WriteFloatAcquisition#set(float) set operation} implemented.
+     *
+     * @since 1.0
+     * @see WriteFloatAcquisition
+     */
+    private interface SetOperationImplementation extends WriteFloatAcquisition {
+        @Override
+        default void set(float value) {
+            this.ensurePermittedAndLocked();
+            this.acquirable().value = value;
+        }
+
+        /**
+         * Gets {@linkplain FloatAcquirable a float acquirable} that owns this acquisition.
+         *
+         * @return the float acquirable
+         * @since 1.0
+         */
+        @NotNull FloatAcquirable acquirable();
     }
 }
