@@ -66,6 +66,9 @@ public abstract class Acquirable<A extends Acquisition, WA extends A> {
      * {@link Acquisition#close()} is called and always returns {@code true} when {@link Acquisition#isUnlocked()}
      * is called.</p>
      *
+     * <p>The return value may be ignored in case when a read acquisition has been already acquired and an upgrade
+     * to write lock is needed.</p>
+     *
      * <p>If the reused acquisition needs to be unlocked the already existing acquisition needs to be used to do
      * that.</p>
      *
