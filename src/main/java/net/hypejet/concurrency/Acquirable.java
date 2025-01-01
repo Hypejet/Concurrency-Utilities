@@ -4,11 +4,10 @@ import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.StampedLock;
 
 /**
@@ -22,10 +21,8 @@ import java.util.concurrent.locks.StampedLock;
  */
 public abstract class Acquirable<A extends Acquisition, WA extends A> {
 
-    private final Map<Thread, A> acquisitions = new IdentityHashMap<>();
+    private final Map<Thread, A> acquisitions = new ConcurrentHashMap<>();
     private final StampedLock lock = new StampedLock();
-
-    private final ReentrantLock acquisitionsLock = new ReentrantLock();
 
     /**
      * Creates {@linkplain A an acquisition} of state held by this {@linkplain Acquirable acquirable} that supports
@@ -43,22 +40,16 @@ public abstract class Acquirable<A extends Acquisition, WA extends A> {
      */
     @Contract(pure = true)
     public final @NotNull A acquireRead() {
-        try {
-            this.acquisitionsLock.lock();
-
-            A foundAcquisition = this.acquisitions.get(Thread.currentThread());
-            if (foundAcquisition != null) {
-                ensureReused(foundAcquisition);
-                return this.reuseReadAcquisition(foundAcquisition);
-            }
-
-            A createdAcquisition = this.createReadAcquisition();
-            AbstractAcquisition<?, ?> validatedAcquisition = this.validate(createdAcquisition);
-            this.acquisitions.put(validatedAcquisition.owner, createdAcquisition);
-            return createdAcquisition;
-        } finally {
-            this.acquisitionsLock.unlock();
+        A foundAcquisition = this.acquisitions.get(Thread.currentThread());
+        if (foundAcquisition != null) {
+            ensureReused(foundAcquisition);
+            return this.reuseReadAcquisition(foundAcquisition);
         }
+
+        A createdAcquisition = this.createReadAcquisition();
+        AbstractAcquisition<?, ?> validatedAcquisition = this.validate(createdAcquisition);
+        this.acquisitions.put(validatedAcquisition.owner, createdAcquisition);
+        return createdAcquisition;
     }
 
     /**
@@ -81,40 +72,34 @@ public abstract class Acquirable<A extends Acquisition, WA extends A> {
      * @since 1.0
      */
     public final @NotNull WA acquireWrite() {
-        try {
-            this.acquisitionsLock.lock();
-
-            A foundAcquisition = this.acquisitions.get(Thread.currentThread());
-            if (foundAcquisition == null) {
-                WA createdAcquisition = this.createWriteAcquisition();
-                AbstractAcquisition<?, ?> validatedAcquisition = this.validate(createdAcquisition);
-                this.acquisitions.put(validatedAcquisition.owner, createdAcquisition);
-                return createdAcquisition;
-            }
-
-            WA castAcquisition = this.castToWriteAcquisition(foundAcquisition);
-            if (castAcquisition != null) {
-                WA reusedAcquisition = this.reuseWriteAcquisition(castAcquisition);
-                ensureReused(reusedAcquisition);
-                return reusedAcquisition;
-            }
-
-            AbstractAcquisition<?, ?> validatedAcquisition = this.validate(foundAcquisition);
-
-            long lockStamp = this.lock.tryConvertToWriteLock(validatedAcquisition.lockStamp);
-            if (lockStamp == 0)
-                throw new IllegalStateException("Could not convert the read lock to a write lock");
-
-            validatedAcquisition.setLockStamp(lockStamp);
-
-            WA upgrade = this.createUpgradedAcquisition(foundAcquisition);
-            ensureReused(upgrade);
-
-            this.acquisitions.put(validatedAcquisition.owner, upgrade);
-            return upgrade;
-        } finally {
-            this.acquisitionsLock.unlock();
+        A foundAcquisition = this.acquisitions.get(Thread.currentThread());
+        if (foundAcquisition == null) {
+            WA createdAcquisition = this.createWriteAcquisition();
+            AbstractAcquisition<?, ?> validatedAcquisition = this.validate(createdAcquisition);
+            this.acquisitions.put(validatedAcquisition.owner, createdAcquisition);
+            return createdAcquisition;
         }
+
+        WA castAcquisition = this.castToWriteAcquisition(foundAcquisition);
+        if (castAcquisition != null) {
+            WA reusedAcquisition = this.reuseWriteAcquisition(castAcquisition);
+            ensureReused(reusedAcquisition);
+            return reusedAcquisition;
+        }
+
+        AbstractAcquisition<?, ?> validatedAcquisition = this.validate(foundAcquisition);
+
+        long lockStamp = this.lock.tryConvertToWriteLock(validatedAcquisition.lockStamp);
+        if (lockStamp == 0)
+            throw new IllegalStateException("Could not convert the read lock to a write lock");
+
+        validatedAcquisition.setLockStamp(lockStamp);
+
+        WA upgrade = this.createUpgradedAcquisition(foundAcquisition);
+        ensureReused(upgrade);
+
+        this.acquisitions.put(validatedAcquisition.owner, upgrade);
+        return upgrade;
     }
 
     /**
@@ -183,15 +168,9 @@ public abstract class Acquirable<A extends Acquisition, WA extends A> {
      * @since 1.0
      */
     private void unregisterAcquisition(@NotNull A acquisition) {
-        try {
-            this.acquisitionsLock.lock();
-
-            // There is no need for a nullability check, the validate method will do that for us
-            AbstractAcquisition<?, ?> validatedAcquisition = this.validate(acquisition);
-            this.acquisitions.remove(validatedAcquisition.owner, acquisition);
-        } finally {
-            this.acquisitionsLock.unlock();
-        }
+        // There is no need for a nullability check, the validate method will do that for us
+        AbstractAcquisition<?, ?> validatedAcquisition = this.validate(acquisition);
+        this.acquisitions.remove(validatedAcquisition.owner, acquisition);
     }
 
     /**
