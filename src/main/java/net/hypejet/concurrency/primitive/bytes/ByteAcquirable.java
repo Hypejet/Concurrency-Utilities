@@ -2,6 +2,9 @@ package net.hypejet.concurrency.primitive.bytes;
 
 import net.hypejet.concurrency.Acquirable;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.Objects;
 
 /**
  * Represents {@linkplain Acquirable an acquirable}, which guards a byte.
@@ -9,7 +12,7 @@ import org.jetbrains.annotations.NotNull;
  * @since 1.0
  * @see Acquirable
  */
-public final class ByteAcquirable extends Acquirable<ByteAcquisition> {
+public final class ByteAcquirable extends Acquirable<ByteAcquisition, WriteByteAcquisition> {
 
     private byte value;
 
@@ -33,53 +36,36 @@ public final class ByteAcquirable extends Acquirable<ByteAcquisition> {
         this.value = value;
     }
 
-    /**
-     * Creates {@linkplain ByteAcquisition a byte acquisition} of a byte held by this
-     * {@linkplain ByteAcquirable byte acquirable} that supports read-only operations.
-     *
-     * <p>If the caller thread has already created an acquisition a special implementation is used, which reuses it,
-     * does nothing when {@link ByteAcquisition#close()} is called and always returns {@code true} when
-     * {@link ByteAcquisition#isUnlocked()} is called.</p>
-     *
-     * <p>If the acquisition needs to be unlocked the already existing acquisition needs to be used to do that.</p>
-     *
-     * @return the acquisition
-     * @since 1.0
-     */
     @Override
-    public @NotNull ByteAcquisition acquireRead() {
-        ByteAcquisition foundAcquisition = this.findAcquisition();
-        if (foundAcquisition != null)
-            return new ReusedByteAcquisition<>(foundAcquisition);
+    protected @NotNull ByteAcquisition createReadAcquisition() {
         return new ByteAcquisitionImpl(this);
     }
 
-    /**
-     * Creates {@linkplain WriteByteAcquisition a write byte acquisition} of a byte held by
-     * this {@linkplain ByteAcquirable byte acquirable} that supports write operations.
-     *
-     * <p>If the caller thread has already created a write acquisition a special implementation is used, which
-     * reuses it, does nothing when {@link ByteAcquisition#close()} is called and always returns {@code true} when
-     * {@link ByteAcquisition#isUnlocked()} is called.</p>
-     *
-     * <p>If the acquisition needs to be unlocked the already existing acquisition needs to be used to do that.</p>
-     *
-     * @return the acquisition
-     * @since 1.0
-     * @throws IllegalArgumentException if the caller thread has already created an acquisition, but it is not a write
-     *                                  acquisition
-     */
     @Override
-    public @NotNull WriteByteAcquisition acquireWrite() {
-        ByteAcquisition foundAcquisition = this.findAcquisition();
-        if (foundAcquisition == null)
-            return new WriteByteAcquisitionImpl(this);
+    protected @NotNull WriteByteAcquisition createWriteAcquisition() {
+        return new WriteByteAcquisitionImpl(this);
+    }
 
-        if (!(foundAcquisition instanceof WriteByteAcquisition writeAcquisition)) {
-            throw new IllegalArgumentException("The caller thread has already created an acquisition," +
-                    " but it is not a write acquisition");
-        }
-        return new ReusedWriteByteAcquisition(writeAcquisition);
+    @Override
+    protected @NotNull ByteAcquisition reuseReadAcquisition(@NotNull ByteAcquisition originalAcquisition) {
+        return new ReusedByteAcquisition<>(originalAcquisition);
+    }
+
+    @Override
+    protected @NotNull WriteByteAcquisition reuseWriteAcquisition(@NotNull WriteByteAcquisition originalAcquisition) {
+        return new ReusedWriteByteAcquisition(originalAcquisition);
+    }
+
+    @Override
+    protected @NotNull WriteByteAcquisition createUpgradedAcquisition(@NotNull ByteAcquisition originalAcquisition) {
+        return new UpgradedByteAcquisition(originalAcquisition, this);
+    }
+
+    @Override
+    protected @Nullable WriteByteAcquisition castToWriteAcquisition(@NotNull ByteAcquisition acquisition) {
+        if (acquisition instanceof WriteByteAcquisition castAcquisition)
+            return castAcquisition;
+        return null;
     }
 
     /**
@@ -109,7 +95,7 @@ public final class ByteAcquirable extends Acquirable<ByteAcquisition> {
      * @see AbstractByteAcquisition
      */
     private static final class WriteByteAcquisitionImpl extends AbstractByteAcquisition
-            implements WriteByteAcquisition {
+            implements WriteByteAcquisition, SetOperationImplementation {
         /**
          * Constructs the {@linkplain WriteByteAcquisitionImpl write byte acquisition implementation}.
          *
@@ -122,9 +108,8 @@ public final class ByteAcquirable extends Acquirable<ByteAcquisition> {
         }
 
         @Override
-        public void set(byte value) {
-            this.ensurePermittedAndLocked();
-            this.acquirable.value = value;
+        public @NotNull ByteAcquirable acquirable() {
+            return this.acquirable;
         }
     }
 
@@ -160,6 +145,38 @@ public final class ByteAcquirable extends Acquirable<ByteAcquisition> {
         @Override
         protected final @NotNull ByteAcquisition cast() {
             return this;
+        }
+    }
+
+    /**
+     * Represents {@linkplain ReusedByteAcquisition a reused byte acquisition}, which reuses
+     * {@linkplain ByteAcquisition a byte acquisition}, whose lock has been upgraded to a write lock.
+     *
+     * @since 1.0
+     * @see ByteAcquisition
+     * @see ReusedByteAcquisition
+     */
+    private static final class UpgradedByteAcquisition extends ReusedByteAcquisition<ByteAcquisition>
+            implements ByteAcquisition, SetOperationImplementation {
+
+        private final ByteAcquirable acquirable;
+
+        /**
+         * Constructs the {@linkplain UpgradedByteAcquisition upgraded byte acquisition}.
+         *
+         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param acquirable an acquirable that owns the original acquisition
+         * @since 1.0
+         */
+        private UpgradedByteAcquisition(@NotNull ByteAcquisition originalAcquisition,
+                                        @NotNull ByteAcquirable acquirable) {
+            super(originalAcquisition);
+            this.acquirable = Objects.requireNonNull(acquirable, "The acquirable must not be null");
+        }
+
+        @Override
+        public @NotNull ByteAcquirable acquirable() {
+            return this.acquirable;
         }
     }
 
@@ -217,5 +234,28 @@ public final class ByteAcquirable extends Acquirable<ByteAcquisition> {
         public final byte get() {
             return this.originalAcquisition.get();
         }
+    }
+
+    /**
+     * Represents {@linkplain WriteByteAcquisition a write byte acquisition} with
+     * the {@linkplain WriteByteAcquisition#set(byte) set operation} implemented.
+     *
+     * @since 1.0
+     * @see WriteByteAcquisition
+     */
+    private interface SetOperationImplementation extends WriteByteAcquisition {
+        @Override
+        default void set(byte value) {
+            this.ensurePermittedAndLocked();
+            this.acquirable().value = value;
+        }
+
+        /**
+         * Gets {@linkplain ByteAcquirable a byte acquirable} that owns this acquisition.
+         *
+         * @return the boolean acquirable
+         * @since 1.0
+         */
+        @NotNull ByteAcquirable acquirable();
     }
 }

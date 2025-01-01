@@ -2,6 +2,9 @@ package net.hypejet.concurrency.primitive.booleans;
 
 import net.hypejet.concurrency.Acquirable;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.Objects;
 
 /**
  * Represents {@linkplain Acquirable an acquirable}, which guards a boolean.
@@ -9,7 +12,7 @@ import org.jetbrains.annotations.NotNull;
  * @since 1.0
  * @see Acquirable
  */
-public final class BooleanAcquirable extends Acquirable<BooleanAcquisition> {
+public final class BooleanAcquirable extends Acquirable<BooleanAcquisition, WriteBooleanAcquisition> {
 
     private boolean value;
 
@@ -33,53 +36,40 @@ public final class BooleanAcquirable extends Acquirable<BooleanAcquisition> {
         this.value = value;
     }
 
-    /**
-     * Creates {@linkplain BooleanAcquisition a boolean acquisition} of a boolean held by this
-     * {@linkplain BooleanAcquirable boolean acquirable} that supports read-only operations.
-     *
-     * <p>If the caller thread has already created an acquisition a special implementation is used, which reuses it,
-     * does nothing when {@link BooleanAcquisition#close()} is called and always returns {@code true} when
-     * {@link BooleanAcquisition#isUnlocked()} is called.</p>
-     *
-     * <p>If the acquisition needs to be unlocked the already existing acquisition needs to be used to do that.</p>
-     *
-     * @return the acquisition
-     * @since 1.0
-     */
     @Override
-    public @NotNull BooleanAcquisition acquireRead() {
-        BooleanAcquisition foundAcquisition = this.findAcquisition();
-        if (foundAcquisition != null)
-            return new ReusedBooleanAcquisition<>(foundAcquisition);
+    protected @NotNull BooleanAcquisition createReadAcquisition() {
         return new BooleanAcquisitionImpl(this);
     }
 
-    /**
-     * Creates {@linkplain WriteBooleanAcquisition a write boolean acquisition} of a boolean held by
-     * this {@linkplain BooleanAcquirable boolean acquirable} that supports write operations.
-     *
-     * <p>If the caller thread has already created a write acquisition a special implementation is used, which
-     * reuses it, does nothing when {@link BooleanAcquisition#close()} is called and always returns {@code true} when
-     * {@link BooleanAcquisition#isUnlocked()} is called.</p>
-     *
-     * <p>If the acquisition needs to be unlocked the already existing acquisition needs to be used to do that.</p>
-     *
-     * @return the acquisition
-     * @since 1.0
-     * @throws IllegalArgumentException if the caller thread has already created an acquisition, but it is not a write
-     *                                  acquisition
-     */
     @Override
-    public @NotNull WriteBooleanAcquisition acquireWrite() {
-        BooleanAcquisition foundAcquisition = this.findAcquisition();
-        if (foundAcquisition == null)
-            return new WriteBooleanAcquisitionImpl(this);
+    protected @NotNull WriteBooleanAcquisition createWriteAcquisition() {
+        return new WriteBooleanAcquisitionImpl(this);
+    }
 
-        if (!(foundAcquisition instanceof WriteBooleanAcquisition writeAcquisition)) {
-            throw new IllegalArgumentException("The caller thread has already created an acquisition," +
-                    " but it is not a write acquisition");
-        }
-        return new ReusedWriteBooleanAcquisition(writeAcquisition);
+    @Override
+    protected @NotNull BooleanAcquisition reuseReadAcquisition(@NotNull BooleanAcquisition originalAcquisition) {
+        return new ReusedBooleanAcquisition<>(originalAcquisition);
+    }
+
+    @Override
+    protected @NotNull WriteBooleanAcquisition reuseWriteAcquisition(
+            @NotNull WriteBooleanAcquisition originalAcquisition
+    ) {
+        return new ReusedWriteBooleanAcquisition(originalAcquisition);
+    }
+
+    @Override
+    protected @NotNull WriteBooleanAcquisition createUpgradedAcquisition(
+            @NotNull BooleanAcquisition originalAcquisition
+    ) {
+        return new UpgradedBooleanAcquisition(originalAcquisition, this);
+    }
+
+    @Override
+    protected @Nullable WriteBooleanAcquisition castToWriteAcquisition(@NotNull BooleanAcquisition acquisition) {
+        if (acquisition instanceof WriteBooleanAcquisition castAcquisition)
+            return castAcquisition;
+        return null;
     }
 
     /**
@@ -109,7 +99,7 @@ public final class BooleanAcquirable extends Acquirable<BooleanAcquisition> {
      * @see AbstractBooleanAcquisition
      */
     private static final class WriteBooleanAcquisitionImpl extends AbstractBooleanAcquisition
-            implements WriteBooleanAcquisition {
+            implements WriteBooleanAcquisition, SetOperationImplementation {
         /**
          * Constructs the {@linkplain WriteBooleanAcquisitionImpl write boolean acquisition implementation}.
          *
@@ -122,9 +112,8 @@ public final class BooleanAcquirable extends Acquirable<BooleanAcquisition> {
         }
 
         @Override
-        public void set(boolean value) {
-            this.ensurePermittedAndLocked();
-            this.acquirable.value = value;
+        public @NotNull BooleanAcquirable acquirable() {
+            return this.acquirable;
         }
     }
 
@@ -159,6 +148,38 @@ public final class BooleanAcquirable extends Acquirable<BooleanAcquisition> {
         @Override
         protected final @NotNull BooleanAcquisition cast() {
             return this;
+        }
+    }
+
+    /**
+     * Represents {@linkplain ReusedBooleanAcquisition a reused boolean acquisition}, which reuses
+     * {@linkplain BooleanAcquirable a boolean acquisition}, whose lock has been upgraded to a write lock.
+     *
+     * @since 1.0
+     * @see BooleanAcquisition
+     * @see ReusedBooleanAcquisition
+     */
+    private static final class UpgradedBooleanAcquisition extends ReusedBooleanAcquisition<BooleanAcquisition>
+            implements WriteBooleanAcquisition, SetOperationImplementation {
+
+        private final BooleanAcquirable acquirable;
+
+        /**
+         * Constructs the {@linkplain UpgradedBooleanAcquisition upgraded boolean acquisition}.
+         *
+         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param acquirable an acquirable that owns the original acquisition
+         * @since 1.0
+         */
+        private UpgradedBooleanAcquisition(@NotNull BooleanAcquisition originalAcquisition,
+                                           @NotNull BooleanAcquirable acquirable) {
+            super(originalAcquisition);
+            this.acquirable = Objects.requireNonNull(acquirable, "The acquirable must not be null");
+        }
+
+        @Override
+        public @NotNull BooleanAcquirable acquirable() {
+            return this.acquirable;
         }
     }
 
@@ -216,5 +237,28 @@ public final class BooleanAcquirable extends Acquirable<BooleanAcquisition> {
         public final boolean get() {
             return this.originalAcquisition.get();
         }
+    }
+
+    /**
+     * Represents {@linkplain WriteBooleanAcquisition a write boolean acquisition} with
+     * the {@linkplain WriteBooleanAcquisition#set(boolean) set operation} implemented.
+     *
+     * @since 1.0
+     * @see WriteBooleanAcquisition
+     */
+    private interface SetOperationImplementation extends WriteBooleanAcquisition {
+        @Override
+        default void set(boolean value) {
+            this.ensurePermittedAndLocked();
+            this.acquirable().value = value;
+        }
+
+        /**
+         * Gets {@linkplain BooleanAcquirable a boolean acquirable} that owns this acquisition.
+         *
+         * @return the boolean acquirable
+         * @since 1.0
+         */
+        @NotNull BooleanAcquirable acquirable();
     }
 }

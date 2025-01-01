@@ -7,100 +7,174 @@ import org.jetbrains.annotations.Nullable;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.concurrent.locks.StampedLock;
 
 /**
  * Represents something that protects a state using {@linkplain Lock a lock} that requires to be acquired to read
  * or write the state.
  *
  * @param <A> a type of acquisition that the acquirable creates
+ * @param <WA> a type of write acquisition that the acquirable creates
  * @since 1.0
  * @see Lock
  */
-public abstract class Acquirable<A extends Acquisition> {
-
-    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+public abstract class Acquirable<A extends Acquisition, WA extends A> {
 
     private final Map<Thread, A> acquisitions = new IdentityHashMap<>();
+    private final StampedLock lock = new StampedLock();
+
     private final ReentrantLock acquisitionsLock = new ReentrantLock();
 
     /**
-     * Gets {@linkplain Acquisition an acquisition} of this acquirable that was created by the caller thread.
+     * Creates {@linkplain A an acquisition} of state held by this {@linkplain Acquirable acquirable} that supports
+     * read-only operations.
      *
-     * <p>Using the found acquisition is safe, since it belongs to the caller thread, and it is impossible for the
-     * acquisition to be closed by another thread.</p>
+     * <p>If the caller thread has already created an acquisition a special implementation is used, which reuses it,
+     * does nothing when {@link Acquisition#close()} is called and always returns {@code true} when
+     * {@link Acquisition#isUnlocked()} is called.</p>
      *
-     * @return the acquisition, {@code null} if caller thread did not create an acquisition of this acquirable
+     * <p>If the acquisition needs to be unlocked the already existing acquisition needs to be used to do that.</p>
+     *
+     * @return the acquisition
      * @since 1.0
      */
     @Contract(pure = true)
-    public final @Nullable A findAcquisition() {
+    public final @NotNull A acquireRead() {
         try {
             this.acquisitionsLock.lock();
-            return this.acquisitions.get(Thread.currentThread());
+
+            A foundAcquisition = this.acquisitions.get(Thread.currentThread());
+            if (foundAcquisition != null) {
+                ensureReused(foundAcquisition);
+                return this.reuseReadAcquisition(foundAcquisition);
+            }
+
+            A createdAcquisition = this.createReadAcquisition();
+            AbstractAcquisition<?, ?> validatedAcquisition = this.validate(createdAcquisition);
+            this.acquisitions.put(validatedAcquisition.owner, createdAcquisition);
+            return createdAcquisition;
         } finally {
             this.acquisitionsLock.unlock();
         }
     }
 
     /**
-     * Creates a new {@linkplain Condition condition} of a write lock of this {@linkplain Acquirable acquirable}.
+     * Creates {@linkplain WA a write acquisition} of a state held by this {@linkplain Acquirable acquirable} that
+     * supports write operations.
      *
-     * @return the condition
-     * @since 1.0
-     */
-    @Contract(pure = true)
-    public final @NotNull Condition newCondition() {
-        return this.lock.writeLock().newCondition();
-    }
-
-    /**
-     * Creates {@linkplain Acquisition an acquisition} of a state held by this {@linkplain Acquirable acquirable}
-     * that supports read-only operations.
+     * <p>If the caller thread has already created a write acquisition a special implementation is used, which
+     * reuses it, does nothing when {@link Acquisition#close()} is called and always returns {@code true} when
+     * {@link Acquisition#isUnlocked()} is called.</p>
+     *
+     * <p>If the acquisition needs to be unlocked the already existing acquisition needs to be used to do that.</p>
      *
      * @return the acquisition
      * @since 1.0
+     * @throws IllegalArgumentException if the caller thread has already created an acquisition, but it is not a write
+     *                                  acquisition
      */
-    public abstract @NotNull A acquireRead();
-
-    /**
-     * Creates {@linkplain Acquisition an acquisition} of a state held by this {@linkplain Acquirable acquirable}
-     * that supports write operations.
-     *
-     * @return the acquisition
-     * @since 1.0
-     */
-    public abstract @NotNull A acquireWrite();
-
-    /**
-     * Registers an acquisition.
-     *
-     * @param acquisition the acquisition
-     * @since 1.0
-     * @throws IllegalArgumentException if an acquisition for current thread has been already registered
-     */
-    private void registerAcquisition(@NotNull A acquisition) {
+    public final @NotNull WA acquireWrite() {
         try {
             this.acquisitionsLock.lock();
-            // There is no need for a nullability check, the validate method will do that for us
-            AbstractAcquisition<?, ?> validatedAcquisition = this.validate(acquisition);
 
-            Thread owner = validatedAcquisition.owner;
-            if (this.acquisitions.containsKey(owner))
-                throw new IllegalArgumentException("An acquisition for current thread has been already registered");
-            this.acquisitions.put(owner, acquisition);
+            A foundAcquisition = this.acquisitions.get(Thread.currentThread());
+            if (foundAcquisition == null) {
+                WA createdAcquisition = this.createWriteAcquisition();
+                AbstractAcquisition<?, ?> validatedAcquisition = this.validate(createdAcquisition);
+                this.acquisitions.put(validatedAcquisition.owner, createdAcquisition);
+                return createdAcquisition;
+            }
+
+            WA castAcquisition = this.castToWriteAcquisition(foundAcquisition);
+            if (castAcquisition != null) {
+                WA reusedAcquisition = this.reuseWriteAcquisition(castAcquisition);
+                ensureReused(reusedAcquisition);
+                return reusedAcquisition;
+            }
+
+            AbstractAcquisition<?, ?> validatedAcquisition = this.validate(foundAcquisition);
+
+            long lockStamp = this.lock.tryConvertToWriteLock(validatedAcquisition.lockStamp);
+            if (lockStamp == 0)
+                throw new IllegalStateException("Could not convert the read lock to a write lock");
+
+            validatedAcquisition.setLockStamp(lockStamp);
+
+            WA upgrade = this.createUpgradedAcquisition(foundAcquisition);
+            ensureReused(upgrade);
+
+            this.acquisitions.put(validatedAcquisition.owner, upgrade);
+            return upgrade;
         } finally {
             this.acquisitionsLock.unlock();
         }
     }
+
+    /**
+     * Creates a new acquisition, which supports read-only operations.
+     *
+     * @return the acquisition created
+     * @since 1.0
+     */
+    protected abstract @NotNull A createReadAcquisition();
+
+    /**
+     * Creates a new acquisition, which supports write operations.
+     *
+     * @return the acquisition created
+     * @since 1.0
+     */
+    protected abstract @NotNull WA createWriteAcquisition();
+
+    /**
+     * Creates a reused acquisition of the read acquisition specified.
+     *
+     * <p>The created acquisition must extend {@linkplain ReusedAcquisition reused acquisition}.</p>
+     *
+     * @param originalAcquisition the acquisition to reuse
+     * @return the reused acquisition created
+     * @since 1.0
+     */
+    protected abstract @NotNull A reuseReadAcquisition(@NotNull A originalAcquisition);
+
+    /**
+     * Creates a reused acquisition of the write acquisition specified.
+     *
+     * <p>The created acquisition must extend {@linkplain ReusedAcquisition reused acquisition}.</p>
+     *
+     * @param originalAcquisition the acquisition to reuse
+     * @return the reused acquisition created
+     * @since 1.0
+     */
+    protected abstract @NotNull WA reuseWriteAcquisition(@NotNull WA originalAcquisition);
+
+    /**
+     * Creates a reused acquisition of the read acquisition specified, however, the reused acquisition should support
+     * write operations. Lock of the read acquisition has been upgraded to a write lock.
+     *
+     * <p>The created acquisition must extend {@linkplain ReusedAcquisition reused acquisition}.</p>
+     *
+     * @param originalAcquisition the acquisition to upgrade
+     * @return the upgraded acquisition created
+     * @since 1.0
+     */
+    protected abstract @NotNull WA createUpgradedAcquisition(@NotNull A originalAcquisition);
+
+    /**
+     * Casts the acquisition specified to a write acquisition.
+     *
+     * @param acquisition the acquisition to cast
+     * @return the write acquisition, {@code null} if the acquisition specified is not a write acquisition
+     * @since 1.0
+     */
+    protected abstract @Nullable WA castToWriteAcquisition(@NotNull A acquisition);
 
     /**
      * Unregisters an acquisition.
      *
-     * @param acquisition the acquisition
+     * @param acquisition the acquisition to unregister
      * @since 1.0
      */
     private void unregisterAcquisition(@NotNull A acquisition) {
@@ -123,7 +197,7 @@ public abstract class Acquirable<A extends Acquisition> {
      * @return the abstract acquisition
      * @since 1.0
      */
-    private @NotNull AbstractAcquisition<?, ?> validate(@NotNull A acquisition) {
+    private @NotNull AbstractAcquisition<?, ?> validate(@NotNull Acquisition acquisition) {
         Objects.requireNonNull(acquisition, "the acquisition must not be null");
 
         if (!(acquisition instanceof Acquirable.AbstractAcquisition<?,?> abstractAcquisition))
@@ -135,6 +209,19 @@ public abstract class Acquirable<A extends Acquisition> {
     }
 
     /**
+     * Ensures that {@linkplain Acquisition an acquisition} specified is
+     * {@linkplain ReusedAcquisition a reused acquisition}.
+     *
+     * @param acquisition the acquisition to ensure that is a reused acquisition
+     * @since 1.0
+     */
+    private static void ensureReused(@NotNull Acquisition acquisition) {
+        Objects.requireNonNull(acquisition, "The acquisition must not be null");
+        if (!(acquisition instanceof Acquirable.ReusedAcquisition<?>))
+            throw new IllegalArgumentException("The acquisition specified must extend a reused acquisition");
+    }
+
+    /**
      * Represents an abstract implementation of {@linkplain Acquisition acquisition}.
      *
      * @param <AN> a type of acquisition that the following acquirable
@@ -142,15 +229,14 @@ public abstract class Acquirable<A extends Acquisition> {
      * @since 1.0
      * @see Acquisition
      */
-    protected static abstract class AbstractAcquisition<AN extends Acquisition, AE extends Acquirable<AN>>
+    protected static abstract class AbstractAcquisition<AN extends Acquisition, AE extends Acquirable<AN, ?>>
             implements Acquisition {
 
         protected final AE acquirable;
 
-        private final AcquisitionType acquisitionType;
-        private final Lock lock;
         private final Thread owner;
 
+        private long lockStamp;
         private boolean unlocked;
 
         /**
@@ -162,35 +248,32 @@ public abstract class Acquirable<A extends Acquisition> {
          */
         protected AbstractAcquisition(@NotNull AE acquirable, @NotNull AcquisitionType type) {
             this.acquirable = Objects.requireNonNull(acquirable, "The acquirable must not be null");
-            this.acquisitionType = Objects.requireNonNull(type, "The type must not be null");
+            Objects.requireNonNull(type, "The type must not be null");
+
+            this.owner = Thread.currentThread();
 
             // Java for some reason needs a cast of the acquirable to access private methods and fields
-            Acquirable<AN> castAcquirable = acquirable;
+            Acquirable<AN, ?> castAcquirable = acquirable;
+            StampedLock acquirableLock = castAcquirable.lock;
 
-            ReentrantReadWriteLock acquirableLock = castAcquirable.lock;
-            this.lock = switch (type) {
+            this.lockStamp = switch (type) {
                 case READ -> acquirableLock.readLock();
                 case WRITE -> acquirableLock.writeLock();
             };
-
-            this.owner = Thread.currentThread();
-            castAcquirable.registerAcquisition(this.safeCast());
-
-            this.lock.lock();
         }
 
         @Override
         public final void close() {
-            this.ensurePermittedAndLocked();
+            this.checkCallerThread();
 
             if (this.unlocked) return;
             this.unlocked = true;
 
-            // Java for some reason needs a cast of the acquirable
-            Acquirable<AN> castAcquirable = this.acquirable;
+            // Java for some reason needs a cast of the acquirable to access private methods and fields
+            Acquirable<AN, ?> castAcquirable = this.acquirable;
             castAcquirable.unregisterAcquisition(this.safeCast());
 
-            this.lock.unlock();
+            castAcquirable.lock.unlock(this.lockStamp);
         }
 
         @Override
@@ -208,17 +291,11 @@ public abstract class Acquirable<A extends Acquisition> {
 
         @Override
         public final @NotNull AcquisitionType acquisitionType() {
-            return this.acquisitionType;
-        }
-
-        /**
-         * Checks whether the caller thread owns this acquisition.
-         *
-         * @since 1.0
-         */
-        private void checkCallerThread() {
-            if (Thread.currentThread() != this.owner)
-                throw new IllegalArgumentException("The caller thread does not own the acquisition");
+            if (StampedLock.isReadLockStamp(this.lockStamp))
+                return AcquisitionType.READ;
+            if (StampedLock.isWriteLockStamp(this.lockStamp))
+                return AcquisitionType.WRITE;
+            throw new IllegalStateException("The acquisition has an invalid type");
         }
 
         /**
@@ -246,6 +323,15 @@ public abstract class Acquirable<A extends Acquisition> {
          * @since 1.0
          */
         protected abstract @NotNull AN cast();
+
+        private void checkCallerThread() {
+            if (Thread.currentThread() != this.owner)
+                throw new IllegalArgumentException("The caller thread does not own the acquisition");
+        }
+
+        private void setLockStamp(long lockStamp) {
+            this.lockStamp = lockStamp;
+        }
     }
 
     /**

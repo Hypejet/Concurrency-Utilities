@@ -4,6 +4,8 @@ import net.hypejet.concurrency.Acquirable;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Objects;
+
 /**
  * Represents {@linkplain Acquirable an acquirable}, which guards {@linkplain O an object}, which is allowed to be
  * {@code null}.
@@ -12,7 +14,8 @@ import org.jetbrains.annotations.Nullable;
  * @since 1.0
  * @see Acquirable
  */
-public final class NullableObjectAcquirable<O> extends Acquirable<NullableObjectAcquisition<O>> {
+public final class NullableObjectAcquirable<O>
+        extends Acquirable<NullableObjectAcquisition<O>, WriteNullableObjectAcquisition<O>> {
 
     private @Nullable O value;
 
@@ -36,53 +39,44 @@ public final class NullableObjectAcquirable<O> extends Acquirable<NullableObject
         this.value = value;
     }
 
-    /**
-     * Creates {@linkplain NullableObjectAcquisition a nullable object acquisition} of an object held by this
-     * {@linkplain NullableObjectAcquirable nullable object acquirable} that supports read-only operations.
-     *
-     * <p>If the caller thread has already created an acquisition a special implementation is used, which reuses it,
-     * does nothing when {@link NullableObjectAcquisition#close()} is called and always returns {@code true} when
-     * {@link NullableObjectAcquisition#isUnlocked()} is called.</p>
-     *
-     * <p>If the acquisition needs to be unlocked the already existing acquisition needs to be used to do that.</p>
-     *
-     * @return the acquisition
-     * @since 1.0
-     */
     @Override
-    public @NotNull NullableObjectAcquisition<O> acquireRead() {
-        NullableObjectAcquisition<O> foundAcquisition = this.findAcquisition();
-        if (foundAcquisition != null)
-            return new ReusedNullableObjectAcquisition<>(foundAcquisition);
+    protected @NotNull NullableObjectAcquisition<O> createReadAcquisition() {
         return new NullableObjectAcquisitionImpl<>(this);
     }
 
-    /**
-     * Creates {@linkplain WriteNullableObjectAcquisition a write nullable object acquisition} of an object held by
-     * this {@linkplain NullableObjectAcquirable nullable object acquirable} that supports write operations.
-     *
-     * <p>If the caller thread has already created a write acquisition a special implementation is used, which
-     * reuses it, does nothing when {@link NullableObjectAcquisition#close()} is called and always returns {@code true}
-     * when {@link NullableObjectAcquisition#isUnlocked()} is called.</p>
-     *
-     * <p>If the acquisition needs to be unlocked the already existing acquisition needs to be used to do that.</p>
-     *
-     * @return the acquisition
-     * @since 1.0
-     * @throws IllegalArgumentException if the caller thread has already created an acquisition, but it is not a write
-     *                                  acquisition
-     */
     @Override
-    public @NotNull WriteNullableObjectAcquisition<O> acquireWrite() {
-        NullableObjectAcquisition<O> foundAcquisition = this.findAcquisition();
-        if (foundAcquisition == null)
-            return new WriteNullableObjectAcquisitionImpl<>(this);
+    protected @NotNull WriteNullableObjectAcquisition<O> createWriteAcquisition() {
+        return new WriteNullableObjectAcquisitionImpl<>(this);
+    }
 
-        if (!(foundAcquisition instanceof WriteNullableObjectAcquisition<O> writeAcquisition)) {
-            throw new IllegalArgumentException("The caller thread has already created an acquisition," +
-                    " but it is not a write acquisition");
-        }
-        return new ReusedWriteNullableObjectAcquisition<>(writeAcquisition);
+    @Override
+    protected @NotNull NullableObjectAcquisition<O> reuseReadAcquisition(
+            @NotNull NullableObjectAcquisition<O> originalAcquisition
+    ) {
+        return new ReusedNullableObjectAcquisition<>(originalAcquisition);
+    }
+
+    @Override
+    protected @NotNull WriteNullableObjectAcquisition<O> reuseWriteAcquisition(
+            @NotNull WriteNullableObjectAcquisition<O> originalAcquisition
+    ) {
+        return new ReusedWriteNullableObjectAcquisition<>(originalAcquisition);
+    }
+
+    @Override
+    protected @NotNull WriteNullableObjectAcquisition<O> createUpgradedAcquisition(
+            @NotNull NullableObjectAcquisition<O> originalAcquisition
+    ) {
+        return new UpgradedNullableObjectAcquisition<>(originalAcquisition, this);
+    }
+
+    @Override
+    protected @Nullable WriteNullableObjectAcquisition<O> castToWriteAcquisition(
+            @NotNull NullableObjectAcquisition<O> acquisition
+    ) {
+        if (acquisition instanceof WriteNullableObjectAcquisition<O> castAcquisition)
+            return castAcquisition;
+        return null;
     }
 
     /**
@@ -110,13 +104,13 @@ public final class NullableObjectAcquirable<O> extends Acquirable<NullableObject
      * Represents an implementation of {@linkplain AbstractNullableObjectAcquisition an abstract nullable object
      * acquisition} and {@linkplain WriteNullableObjectAcquisition a write nullable object acquisition}.
      *
-     * @param <V> a type of the object
+     * @param <O> a type of the object
      * @since 1.0
      * @see WriteNullableObjectAcquisition
      * @see AbstractNullableObjectAcquisition
      */
-    private static final class WriteNullableObjectAcquisitionImpl<V> extends AbstractNullableObjectAcquisition<V>
-            implements WriteNullableObjectAcquisition<V> {
+    private static final class WriteNullableObjectAcquisitionImpl<O> extends AbstractNullableObjectAcquisition<O>
+            implements WriteNullableObjectAcquisition<O>, SetOperationImplementation<O> {
         /**
          * Constructs the {@linkplain WriteNullableObjectAcquisitionImpl write nullable object acquisition
          * implementation}.
@@ -124,15 +118,14 @@ public final class NullableObjectAcquirable<O> extends Acquirable<NullableObject
          * @param acquirable an acquirable object whose object is guarded by the lock
          * @since 1.0
          */
-        private WriteNullableObjectAcquisitionImpl(@NotNull NullableObjectAcquirable<V> acquirable) {
+        private WriteNullableObjectAcquisitionImpl(@NotNull NullableObjectAcquirable<O> acquirable) {
             // There is no need to check whether the acquirable is null, the superclass will do that for us
             super(acquirable, AcquisitionType.WRITE);
         }
 
         @Override
-        public void set(@Nullable V value) {
-            this.ensurePermittedAndLocked();
-            this.acquirable.value = value;
+        public @NotNull NullableObjectAcquirable<O> acquirable() {
+            return this.acquirable;
         }
     }
 
@@ -170,6 +163,41 @@ public final class NullableObjectAcquirable<O> extends Acquirable<NullableObject
         @Override
         protected final @NotNull NullableObjectAcquisition<O> cast() {
             return this;
+        }
+    }
+
+    /**
+     * Represents {@linkplain ReusedNullableObjectAcquisition a reused nullable object acquisition}, which reuses
+     * {@linkplain NullableObjectAcquisition a nullable object acquisition}, whose lock has been upgraded to a write
+     * lock.
+     *
+     * @param <O> a type of the object
+     * @since 1.0
+     * @see NullableObjectAcquisition
+     * @see ReusedNullableObjectAcquisition
+     */
+    private static final class UpgradedNullableObjectAcquisition<O>
+            extends ReusedNullableObjectAcquisition<O, NullableObjectAcquisition<O>>
+            implements WriteNullableObjectAcquisition<O>, SetOperationImplementation<O> {
+
+        private final NullableObjectAcquirable<O> acquirable;
+
+        /**
+         * Constructs the {@linkplain UpgradedNullableObjectAcquisition upgraded nullable object acquisition}.
+         *
+         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param acquirable an acquirable that owns the original acquisition
+         * @since 1.0
+         */
+        private UpgradedNullableObjectAcquisition(@NotNull NullableObjectAcquisition<O> originalAcquisition,
+                                                  @NotNull NullableObjectAcquirable<O> acquirable) {
+            super(originalAcquisition);
+            this.acquirable = Objects.requireNonNull(acquirable, "The acquirable must not be null");
+        }
+
+        @Override
+        public @NotNull NullableObjectAcquirable<O> acquirable() {
+            return this.acquirable;
         }
     }
 
@@ -230,5 +258,29 @@ public final class NullableObjectAcquirable<O> extends Acquirable<NullableObject
         public final @Nullable V get() {
             return this.originalAcquisition.get();
         }
+    }
+
+    /**
+     * Represents {@linkplain WriteNullableObjectAcquisition a write nullable object acquisition} with
+     * the {@linkplain WriteNullableObjectAcquisition#set(Object) set operation} implemented.
+     *
+     * @param <O> a type of the object
+     * @since 1.0
+     * @see WriteNullableObjectAcquisition
+     */
+    private interface SetOperationImplementation<O> extends WriteNullableObjectAcquisition<O> {
+        @Override
+        default void set(@Nullable O value) {
+            this.ensurePermittedAndLocked();
+            this.acquirable().value = value;
+        }
+
+        /**
+         * Gets {@linkplain NullableObjectAcquirable a nullable object acquirable} that owns this acquisition.
+         *
+         * @return the acquirable
+         * @since 1.0
+         */
+        @NotNull NullableObjectAcquirable<O> acquirable();
     }
 }

@@ -2,6 +2,7 @@ package net.hypejet.concurrency.object.notnull;
 
 import net.hypejet.concurrency.Acquirable;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Objects;
 
@@ -13,7 +14,8 @@ import java.util.Objects;
  * @since 1.0
  * @see Acquirable
  */
-public final class NotNullObjectAcquirable<O> extends Acquirable<NotNullObjectAcquisition<O>> {
+public final class NotNullObjectAcquirable<O>
+        extends Acquirable<NotNullObjectAcquisition<O>, WriteNotNullObjectAcquisition<O>> {
 
     private @NotNull O value;
 
@@ -27,53 +29,42 @@ public final class NotNullObjectAcquirable<O> extends Acquirable<NotNullObjectAc
         this.value = Objects.requireNonNull(value, "The value must not be null");
     }
 
-    /**
-     * Creates {@linkplain NotNullObjectAcquisition a not-null object acquisition} of an object held by this
-     * {@linkplain NotNullObjectAcquirable not-null object acquirable} that supports read-only operations.
-     *
-     * <p>If the caller thread has already created an acquisition a special implementation is used, which reuses it,
-     * does nothing when {@link NotNullObjectAcquisition#close()} is called and always returns {@code true} when
-     * {@link NotNullObjectAcquisition#isUnlocked()} is called.</p>
-     *
-     * <p>If the acquisition needs to be unlocked the already existing acquisition needs to be used to do that.</p>
-     *
-     * @return the acquisition
-     * @since 1.0
-     */
     @Override
-    public @NotNull NotNullObjectAcquisition<O> acquireRead() {
-        NotNullObjectAcquisition<O> foundAcquisition = this.findAcquisition();
-        if (foundAcquisition != null)
-            return new ReusedNotNullObjectAcquisition<>(foundAcquisition);
+    protected @NotNull NotNullObjectAcquisition<O> createReadAcquisition() {
         return new NotNullObjectAcquisitionImpl<>(this);
     }
 
-    /**
-     * Creates {@linkplain WriteNotNullObjectAcquisition a write not-null object acquisition} of an object held by
-     * this {@linkplain NotNullObjectAcquirable not-null object acquirable} that supports write operations.
-     *
-     * <p>If the caller thread has already created a write acquisition a special implementation is used, which
-     * reuses it, does nothing when {@link NotNullObjectAcquisition#close()} is called and always returns {@code true}
-     * when {@link NotNullObjectAcquisition#isUnlocked()} is called.</p>
-     *
-     * <p>If the acquisition needs to be unlocked the already existing acquisition needs to be used to do that.</p>
-     *
-     * @return the acquisition
-     * @since 1.0
-     * @throws IllegalArgumentException if the caller thread has already created an acquisition, but it is not a write
-     *                                  acquisition
-     */
     @Override
-    public @NotNull WriteNotNullObjectAcquisition<O> acquireWrite() {
-        NotNullObjectAcquisition<O> foundAcquisition = this.findAcquisition();
-        if (foundAcquisition == null)
-            return new WriteNotNullObjectAcquisitionImpl<>(this);
+    protected @NotNull WriteNotNullObjectAcquisition<O> createWriteAcquisition() {
+        return new WriteNotNullObjectAcquisitionImpl<>(this);
+    }
 
-        if (!(foundAcquisition instanceof WriteNotNullObjectAcquisition<O> writeAcquisition)) {
-            throw new IllegalArgumentException("The caller thread has already created an acquisition," +
-                    " but it is not a write acquisition");
-        }
-        return new ReusedWriteNotNullObjectAcquisition<>(writeAcquisition);
+    @Override
+    protected @NotNull NotNullObjectAcquisition<O> reuseReadAcquisition(
+            @NotNull NotNullObjectAcquisition<O> originalAcquisition
+    ) {
+        return new ReusedNotNullObjectAcquisition<>(originalAcquisition);
+    }
+
+    @Override
+    protected @NotNull WriteNotNullObjectAcquisition<O> reuseWriteAcquisition(
+            @NotNull WriteNotNullObjectAcquisition<O> originalAcquisition
+    ) {
+        return new ReusedWriteNotNullObjectAcquisition<>(originalAcquisition);
+    }
+
+    @Override
+    protected @NotNull WriteNotNullObjectAcquisition<O> createUpgradedAcquisition(
+            @NotNull NotNullObjectAcquisition<O> originalAcquisition
+    ) {
+        return new UpgradedNotNullObjectAcquisition<>(originalAcquisition, this);
+    }
+
+    @Override
+    protected @Nullable WriteNotNullObjectAcquisition<O> castToWriteAcquisition(
+            @NotNull NotNullObjectAcquisition<O> acquisition
+    ) {
+        return acquisition instanceof WriteNotNullObjectAcquisition<O> castAcquisition ? castAcquisition : null;
     }
 
     /**
@@ -101,13 +92,13 @@ public final class NotNullObjectAcquirable<O> extends Acquirable<NotNullObjectAc
      * Represents an implementation of {@linkplain AbstractNotNullObjectAcquisition an abstract not-null object
      * acquisition} and {@linkplain WriteNotNullObjectAcquisition a write not-null object acquisition}.
      *
-     * @param <V> a type of the object
+     * @param <O> a type of the object
      * @since 1.0
      * @see WriteNotNullObjectAcquisition
      * @see AbstractNotNullObjectAcquisition
      */
-    private static final class WriteNotNullObjectAcquisitionImpl<V> extends AbstractNotNullObjectAcquisition<V>
-            implements WriteNotNullObjectAcquisition<V> {
+    private static final class WriteNotNullObjectAcquisitionImpl<O> extends AbstractNotNullObjectAcquisition<O>
+            implements WriteNotNullObjectAcquisition<O>, SetOperationImplementation<O> {
         /**
          * Constructs the {@linkplain WriteNotNullObjectAcquisitionImpl write not-null object acquisition
          * implementation}.
@@ -115,15 +106,14 @@ public final class NotNullObjectAcquirable<O> extends Acquirable<NotNullObjectAc
          * @param acquirable an acquirable object whose object is guarded by the lock
          * @since 1.0
          */
-        private WriteNotNullObjectAcquisitionImpl(@NotNull NotNullObjectAcquirable<V> acquirable) {
+        private WriteNotNullObjectAcquisitionImpl(@NotNull NotNullObjectAcquirable<O> acquirable) {
             // There is no need to check whether the acquirable is null, the superclass will do that for us
             super(acquirable, AcquisitionType.WRITE);
         }
 
         @Override
-        public void set(@NotNull V value) {
-            this.ensurePermittedAndLocked();
-            this.acquirable.value = Objects.requireNonNull(value, "The value must not be null");
+        public @NotNull NotNullObjectAcquirable<O> acquirable() {
+            return this.acquirable;
         }
     }
 
@@ -166,6 +156,41 @@ public final class NotNullObjectAcquirable<O> extends Acquirable<NotNullObjectAc
 
     /**
      * Represents {@linkplain ReusedNotNullObjectAcquisition a reused not-null object acquisition}, which reuses
+     * {@linkplain NotNullObjectAcquisition a not-null object acquisition}, whose lock has been upgraded to a write
+     * lock.
+     *
+     * @param <O> a type of the object
+     * @since 1.0
+     * @see NotNullObjectAcquisition
+     * @see ReusedNotNullObjectAcquisition
+     */
+    private static final class UpgradedNotNullObjectAcquisition<O>
+            extends ReusedNotNullObjectAcquisition<O, NotNullObjectAcquisition<O>>
+            implements WriteNotNullObjectAcquisition<O>, SetOperationImplementation<O> {
+
+        private final NotNullObjectAcquirable<O> acquirable;
+
+        /**
+         * Constructs the {@linkplain UpgradedNotNullObjectAcquisition upgraded not-null object acquisition}.
+         *
+         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param acquirable an acquirable that owns the original acquisition
+         * @since 1.0
+         */
+        private UpgradedNotNullObjectAcquisition(@NotNull NotNullObjectAcquisition<O> originalAcquisition,
+                                                 @NotNull NotNullObjectAcquirable<O> acquirable) {
+            super(originalAcquisition);
+            this.acquirable = Objects.requireNonNull(acquirable, "The acquirable must not be null");
+        }
+
+        @Override
+        public @NotNull NotNullObjectAcquirable<O> acquirable() {
+            return this.acquirable;
+        }
+    }
+
+    /**
+     * Represents {@linkplain ReusedNotNullObjectAcquisition a reused not-null object acquisition}, which reuses
      * an already existing {@linkplain WriteNotNullObjectAcquisition write not-null object acquisition}.
      *
      * @param <O> a type of the object
@@ -198,14 +223,14 @@ public final class NotNullObjectAcquirable<O> extends Acquirable<NotNullObjectAc
      * Represents an implementation of {@linkplain ReusedAcquisition a reused acquisition} and
      * {@linkplain NotNullObjectAcquisition a not-null object acquisition}
      *
-     * @param <V> a type of object of the object acquisition that is being reused
+     * @param <O> a type of object of the object acquisition that is being reused
      * @param <A> a type of the acquisition that is being reused
      * @since 1.0
      * @see NotNullObjectAcquisition
      * @see ReusedAcquisition
      */
-    private static class ReusedNotNullObjectAcquisition<V, A extends NotNullObjectAcquisition<V>>
-            extends ReusedAcquisition<A> implements NotNullObjectAcquisition<V> {
+    private static class ReusedNotNullObjectAcquisition<O, A extends NotNullObjectAcquisition<O>>
+            extends ReusedAcquisition<A> implements NotNullObjectAcquisition<O> {
         /**
          * Constructs the {@linkplain ReusedNotNullObjectAcquisition reused not-null object acquisition}.
          *
@@ -218,8 +243,32 @@ public final class NotNullObjectAcquirable<O> extends Acquirable<NotNullObjectAc
         }
 
         @Override
-        public final @NotNull V get() {
+        public final @NotNull O get() {
             return this.originalAcquisition.get();
         }
+    }
+
+    /**
+     * Represents {@linkplain WriteNotNullObjectAcquisition a write not-null object acquisition} with
+     * the {@linkplain WriteNotNullObjectAcquisition#set(Object) set operation} implemented.
+     *
+     * @param <O> a type of the object
+     * @since 1.0
+     * @see WriteNotNullObjectAcquisition
+     */
+    private interface SetOperationImplementation<O> extends WriteNotNullObjectAcquisition<O> {
+        @Override
+        default void set(@NotNull O value) {
+            this.ensurePermittedAndLocked();
+            this.acquirable().value = Objects.requireNonNull(value, "The value must not be null");
+        }
+
+        /**
+         * Gets {@linkplain NotNullObjectAcquirable a not-null object acquirable} that owns this acquisition.
+         *
+         * @return the acquirable
+         * @since 1.0
+         */
+        @NotNull NotNullObjectAcquirable<O> acquirable();
     }
 }
