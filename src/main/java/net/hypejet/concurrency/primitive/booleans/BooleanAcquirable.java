@@ -4,8 +4,6 @@ import net.hypejet.concurrency.Acquirable;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Objects;
-
 /**
  * Represents {@linkplain Acquirable an acquirable}, which guards a boolean.
  *
@@ -99,7 +97,7 @@ public final class BooleanAcquirable extends Acquirable<BooleanAcquisition, Writ
      * @see AbstractBooleanAcquisition
      */
     private static final class WriteBooleanAcquisitionImpl extends AbstractBooleanAcquisition
-            implements WriteBooleanAcquisition, SetOperationImplementation {
+            implements SetOperationImplementation {
         /**
          * Constructs the {@linkplain WriteBooleanAcquisitionImpl write boolean acquisition implementation}.
          *
@@ -152,29 +150,30 @@ public final class BooleanAcquirable extends Acquirable<BooleanAcquisition, Writ
     }
 
     /**
-     * Represents {@linkplain ReusedBooleanAcquisition a reused boolean acquisition}, which reuses
-     * {@linkplain BooleanAcquisition a boolean acquisition}, whose lock has been upgraded to a write lock.
+     * Represents an implementation of {@linkplain UpgradedAcquisition an upgraded acquisition}
+     * and {@linkplain WriteBooleanAcquisition a write boolean acquisition}.
      *
      * @since 1.0
-     * @see BooleanAcquisition
-     * @see ReusedBooleanAcquisition
+     * @see WriteBooleanAcquisition
+     * @see UpgradedAcquisition
      */
-    private static final class UpgradedBooleanAcquisition extends ReusedBooleanAcquisition<BooleanAcquisition>
-            implements WriteBooleanAcquisition, SetOperationImplementation {
-
-        private final BooleanAcquirable acquirable;
-
+    private static final class UpgradedBooleanAcquisition
+            extends UpgradedAcquisition<BooleanAcquisition, BooleanAcquirable> implements SetOperationImplementation {
         /**
          * Constructs the {@linkplain UpgradedBooleanAcquisition upgraded boolean acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
-         * @param acquirable an acquirable that owns the original acquisition
+         * @param originalAcquisition an original acquisition that should be reused
+         * @param acquirable an acquirable, which owns the acquisition that should be reused
          * @since 1.0
          */
         private UpgradedBooleanAcquisition(@NotNull BooleanAcquisition originalAcquisition,
                                            @NotNull BooleanAcquirable acquirable) {
-            super(originalAcquisition);
-            this.acquirable = Objects.requireNonNull(acquirable, "The acquirable must not be null");
+            super(originalAcquisition, acquirable);
+        }
+
+        @Override
+        public boolean get() {
+            return this.originalAcquisition.get();
         }
 
         @Override
@@ -197,7 +196,7 @@ public final class BooleanAcquirable extends Acquirable<BooleanAcquisition, Writ
         /**
          * Constructs the {@linkplain ReusedWriteBooleanAcquisition reused write boolean acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param originalAcquisition an original acquisition that should be reused
          * @since 1.0
          */
         private ReusedWriteBooleanAcquisition(@NotNull WriteBooleanAcquisition originalAcquisition) {
@@ -225,7 +224,7 @@ public final class BooleanAcquirable extends Acquirable<BooleanAcquisition, Writ
         /**
          * Constructs the {@linkplain ReusedBooleanAcquisition reused boolean acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param originalAcquisition an original acquisition that should be reused
          * @since 1.0
          */
         private ReusedBooleanAcquisition(@NotNull A originalAcquisition) {

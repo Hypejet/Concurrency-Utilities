@@ -34,7 +34,7 @@ public final class EmptyAcquirable extends Acquirable<EmptyAcquisition, EmptyAcq
 
     @Override
     protected @NotNull EmptyAcquisition createUpgradedAcquisition(@NotNull EmptyAcquisition originalAcquisition) {
-        return originalAcquisition;
+        return new UpgradedEmptyAcquisition(originalAcquisition, this);
     }
 
     @Override
@@ -63,13 +63,35 @@ public final class EmptyAcquirable extends Acquirable<EmptyAcquisition, EmptyAcq
          * @since 1.0
          */
         private EmptyAcquisitionImpl(@NotNull EmptyAcquirable acquirable, @NotNull AcquisitionType type) {
-            // There is no need to check whether the acquirable is null, the superclass will do that for us
             super(acquirable, type);
         }
 
         @Override
         protected @NotNull EmptyAcquisition cast() {
             return this;
+        }
+    }
+
+    /**
+     * Represents an implementation of {@linkplain UpgradedAcquisition an upgraded acquisition} and
+     * {@linkplain EmptyAcquisition an empty acquisition}
+     *
+     * @since 1.0
+     * @see EmptyAcquisition
+     * @see ReusedAcquisition
+     */
+    private static final class UpgradedEmptyAcquisition extends UpgradedAcquisition<EmptyAcquisition, EmptyAcquirable>
+            implements EmptyAcquisition {
+        /**
+         * Constructs the {@linkplain UpgradedEmptyAcquisition upgraded empty acquisition}.
+         *
+         * @param originalAcquisition an original acquisition that should be reused
+         * @param acquirable an acquirable, which owns the acquisition that should be reused
+         * @since 1.0
+         */
+        private UpgradedEmptyAcquisition(@NotNull EmptyAcquisition originalAcquisition,
+                                         @NotNull EmptyAcquirable acquirable) {
+            super(originalAcquisition, acquirable);
         }
     }
 
@@ -86,11 +108,10 @@ public final class EmptyAcquirable extends Acquirable<EmptyAcquisition, EmptyAcq
         /**
          * Constructs the {@linkplain ReusedAcquisition reused acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param originalAcquisition an original acquisition that should be reused
          * @since 1.0
          */
         private ReusedEmptyAcquisition(@NotNull EmptyAcquisition originalAcquisition) {
-            // There is no need to check whether the acquirable is null, the superclass will do that for us
             super(originalAcquisition);
         }
     }

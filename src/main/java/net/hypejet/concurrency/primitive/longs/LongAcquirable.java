@@ -4,8 +4,6 @@ import net.hypejet.concurrency.Acquirable;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Objects;
-
 /**
  * Represents {@linkplain Acquirable an acquirable}, which guards a long.
  *
@@ -95,7 +93,7 @@ public final class LongAcquirable extends Acquirable<LongAcquisition, WriteLongA
      * @see AbstractLongAcquisition
      */
     private static final class WriteLongAcquisitionImpl extends AbstractLongAcquisition
-            implements WriteLongAcquisition, SetOperationImplementation {
+            implements SetOperationImplementation {
         /**
          * Constructs the {@linkplain WriteLongAcquisitionImpl write long acquisition implementation}.
          *
@@ -148,29 +146,30 @@ public final class LongAcquirable extends Acquirable<LongAcquisition, WriteLongA
     }
 
     /**
-     * Represents {@linkplain ReusedLongAcquisition a reused long acquisition}, which reuses
-     * {@linkplain LongAcquisition a long acquisition}, whose lock has been upgraded to a write lock.
+     * Represents an implementation of {@linkplain UpgradedAcquisition an upgraded acquisition}
+     * and {@linkplain WriteLongAcquisition a write long acquisition}.
      *
      * @since 1.0
-     * @see LongAcquisition
-     * @see ReusedLongAcquisition
+     * @see WriteLongAcquisition
+     * @see UpgradedAcquisition
      */
-    private static final class UpgradedLongAcquisition extends ReusedLongAcquisition<LongAcquisition>
-            implements WriteLongAcquisition, SetOperationImplementation {
-
-        private final LongAcquirable acquirable;
-
+    private static final class UpgradedLongAcquisition extends UpgradedAcquisition<LongAcquisition, LongAcquirable>
+            implements SetOperationImplementation {
         /**
          * Constructs the {@linkplain UpgradedLongAcquisition upgraded long acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
-         * @param acquirable an acquirable that owns the original acquisition
+         * @param originalAcquisition an original acquisition that should be reused
+         * @param acquirable an acquirable, which owns the acquisition that should be reused
          * @since 1.0
          */
         private UpgradedLongAcquisition(@NotNull LongAcquisition originalAcquisition,
                                         @NotNull LongAcquirable acquirable) {
-            super(originalAcquisition);
-            this.acquirable = Objects.requireNonNull(acquirable, "The acquirable must not be null");
+            super(originalAcquisition, acquirable);
+        }
+
+        @Override
+        public long get() {
+            return this.originalAcquisition.get();
         }
 
         @Override
@@ -192,7 +191,7 @@ public final class LongAcquirable extends Acquirable<LongAcquisition, WriteLongA
         /**
          * Constructs the {@linkplain ReusedWriteLongAcquisition reused write long acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param originalAcquisition an original acquisition that should be reused
          * @since 1.0
          */
         private ReusedWriteLongAcquisition(@NotNull WriteLongAcquisition originalAcquisition) {
@@ -220,7 +219,7 @@ public final class LongAcquirable extends Acquirable<LongAcquisition, WriteLongA
         /**
          * Constructs the {@linkplain ReusedLongAcquisition reused long acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param originalAcquisition an original acquisition that should be reused
          * @since 1.0
          */
         private ReusedLongAcquisition(@NotNull A originalAcquisition) {

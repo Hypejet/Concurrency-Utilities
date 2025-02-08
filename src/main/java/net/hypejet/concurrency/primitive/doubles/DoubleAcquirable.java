@@ -4,8 +4,6 @@ import net.hypejet.concurrency.Acquirable;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Objects;
-
 /**
  * Represents {@linkplain Acquirable an acquirable}, which guards a double.
  *
@@ -99,7 +97,7 @@ public final class DoubleAcquirable extends Acquirable<DoubleAcquisition, WriteD
      * @see AbstractDoubleAcquisition
      */
     private static final class WriteDoubleAcquisitionImpl extends AbstractDoubleAcquisition
-            implements WriteDoubleAcquisition, SetOperationImplementation {
+            implements SetOperationImplementation {
         /**
          * Constructs the {@linkplain WriteDoubleAcquisitionImpl write double acquisition implementation}.
          *
@@ -153,29 +151,30 @@ public final class DoubleAcquirable extends Acquirable<DoubleAcquisition, WriteD
     }
 
     /**
-     * Represents {@linkplain ReusedDoubleAcquisition a reused double acquisition}, which reuses
-     * {@linkplain DoubleAcquisition a double acquisition}, whose lock has been upgraded to a write lock.
+     * Represents an implementation of {@linkplain UpgradedAcquisition an upgraded acquisition}
+     * and {@linkplain WriteDoubleAcquisition a write double acquisition}.
      *
      * @since 1.0
-     * @see DoubleAcquisition
-     * @see ReusedDoubleAcquisition
+     * @see WriteDoubleAcquisition
+     * @see UpgradedAcquisition
      */
-    private static final class UpgradedDoubleAcquisition extends ReusedDoubleAcquisition<DoubleAcquisition>
-            implements WriteDoubleAcquisition, SetOperationImplementation {
-
-        private final DoubleAcquirable acquirable;
-
+    private static final class UpgradedDoubleAcquisition
+            extends UpgradedAcquisition<DoubleAcquisition, DoubleAcquirable> implements SetOperationImplementation {
         /**
          * Constructs the {@linkplain UpgradedDoubleAcquisition upgraded double acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
-         * @param acquirable an acquirable that owns the original acquisition
+         * @param originalAcquisition an original acquisition that should be reused
+         * @param acquirable an acquirable, which owns the acquisition that should be reused
          * @since 1.0
          */
         private UpgradedDoubleAcquisition(@NotNull DoubleAcquisition originalAcquisition,
                                           @NotNull DoubleAcquirable acquirable) {
-            super(originalAcquisition);
-            this.acquirable = Objects.requireNonNull(acquirable, "The acquirable must not be null");
+            super(originalAcquisition, acquirable);
+        }
+
+        @Override
+        public double get() {
+            return this.originalAcquisition.get();
         }
 
         @Override
@@ -197,7 +196,7 @@ public final class DoubleAcquirable extends Acquirable<DoubleAcquisition, WriteD
         /**
          * Constructs the {@linkplain ReusedWriteDoubleAcquisition reused write double acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param originalAcquisition an original acquisition that should be reused
          * @since 1.0
          */
         private ReusedWriteDoubleAcquisition(@NotNull WriteDoubleAcquisition originalAcquisition) {
@@ -225,7 +224,7 @@ public final class DoubleAcquirable extends Acquirable<DoubleAcquisition, WriteD
         /**
          * Constructs the {@linkplain ReusedDoubleAcquisition reused double acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param originalAcquisition an original acquisition that should be reused
          * @since 1.0
          */
         private ReusedDoubleAcquisition(@NotNull A originalAcquisition) {

@@ -4,8 +4,6 @@ import net.hypejet.concurrency.Acquirable;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Objects;
-
 /**
  * Represents {@linkplain Acquirable an acquirable}, which guards a float.
  *
@@ -97,7 +95,7 @@ public final class FloatAcquirable extends Acquirable<FloatAcquisition, WriteFlo
      * @see AbstractFloatAcquisition
      */
     private static final class WriteFloatAcquisitionImpl extends AbstractFloatAcquisition
-            implements WriteFloatAcquisition, SetOperationImplementation {
+            implements SetOperationImplementation {
         /**
          * Constructs the {@linkplain WriteFloatAcquisitionImpl write float acquisition implementation}.
          *
@@ -151,29 +149,30 @@ public final class FloatAcquirable extends Acquirable<FloatAcquisition, WriteFlo
     }
 
     /**
-     * Represents {@linkplain ReusedFloatAcquisition a reused float acquisition}, which reuses
-     * {@linkplain FloatAcquisition a float acquisition}, whose lock has been upgraded to a write lock.
+     * Represents an implementation of {@linkplain UpgradedAcquisition an upgraded acquisition}
+     * and {@linkplain WriteFloatAcquisition a write float acquisition}.
      *
      * @since 1.0
-     * @see FloatAcquisition
+     * @see WriteFloatAcquisition
      * @see ReusedFloatAcquisition
      */
-    private static final class UpgradedFloatAcquisition extends ReusedFloatAcquisition<FloatAcquisition>
-            implements WriteFloatAcquisition, SetOperationImplementation {
-
-        private final FloatAcquirable acquirable;
-
+    private static final class UpgradedFloatAcquisition extends UpgradedAcquisition<FloatAcquisition, FloatAcquirable>
+            implements SetOperationImplementation {
         /**
          * Constructs the {@linkplain UpgradedFloatAcquisition upgraded float acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
-         * @param acquirable an acquirable that owns the original acquisition
+         * @param originalAcquisition an original acquisition that should be reused
+         * @param acquirable an acquirable, which owns the acquisition that should be reused
          * @since 1.0
          */
         private UpgradedFloatAcquisition(@NotNull FloatAcquisition originalAcquisition,
                                          @NotNull FloatAcquirable acquirable) {
-            super(originalAcquisition);
-            this.acquirable = Objects.requireNonNull(acquirable, "The acquirable must not be null");
+            super(originalAcquisition, acquirable);
+        }
+
+        @Override
+        public float get() {
+            return this.originalAcquisition.get();
         }
 
         @Override
@@ -195,7 +194,7 @@ public final class FloatAcquirable extends Acquirable<FloatAcquisition, WriteFlo
         /**
          * Constructs the {@linkplain ReusedWriteFloatAcquisition reused write float acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param originalAcquisition an original acquisition that should be reused
          * @since 1.0
          */
         private ReusedWriteFloatAcquisition(@NotNull WriteFloatAcquisition originalAcquisition) {
@@ -223,7 +222,7 @@ public final class FloatAcquirable extends Acquirable<FloatAcquisition, WriteFlo
         /**
          * Constructs the {@linkplain ReusedFloatAcquisition reused float acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param originalAcquisition an original acquisition that should be reused
          * @since 1.0
          */
         private ReusedFloatAcquisition(@NotNull A originalAcquisition) {

@@ -4,8 +4,6 @@ import net.hypejet.concurrency.Acquirable;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Objects;
-
 /**
  * Represents {@linkplain Acquirable an acquirable}, which guards a byte.
  *
@@ -95,7 +93,7 @@ public final class ByteAcquirable extends Acquirable<ByteAcquisition, WriteByteA
      * @see AbstractByteAcquisition
      */
     private static final class WriteByteAcquisitionImpl extends AbstractByteAcquisition
-            implements WriteByteAcquisition, SetOperationImplementation {
+            implements SetOperationImplementation {
         /**
          * Constructs the {@linkplain WriteByteAcquisitionImpl write byte acquisition implementation}.
          *
@@ -149,29 +147,30 @@ public final class ByteAcquirable extends Acquirable<ByteAcquisition, WriteByteA
     }
 
     /**
-     * Represents {@linkplain ReusedByteAcquisition a reused byte acquisition}, which reuses
-     * {@linkplain ByteAcquisition a byte acquisition}, whose lock has been upgraded to a write lock.
+     * Represents an implementation of {@linkplain UpgradedAcquisition an upgraded acquisition}
+     * and {@linkplain WriteByteAcquisition a write byte acquisition}.
      *
      * @since 1.0
-     * @see ByteAcquisition
-     * @see ReusedByteAcquisition
+     * @see WriteByteAcquisition
+     * @see UpgradedAcquisition
      */
-    private static final class UpgradedByteAcquisition extends ReusedByteAcquisition<ByteAcquisition>
-            implements ByteAcquisition, SetOperationImplementation {
-
-        private final ByteAcquirable acquirable;
-
+    private static final class UpgradedByteAcquisition extends UpgradedAcquisition<ByteAcquisition, ByteAcquirable>
+            implements SetOperationImplementation {
         /**
          * Constructs the {@linkplain UpgradedByteAcquisition upgraded byte acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
-         * @param acquirable an acquirable that owns the original acquisition
+         * @param originalAcquisition an original acquisition that should be reused
+         * @param acquirable an acquirable, which owns the acquisition that should be reused
          * @since 1.0
          */
         private UpgradedByteAcquisition(@NotNull ByteAcquisition originalAcquisition,
                                         @NotNull ByteAcquirable acquirable) {
-            super(originalAcquisition);
-            this.acquirable = Objects.requireNonNull(acquirable, "The acquirable must not be null");
+            super(originalAcquisition, acquirable);
+        }
+
+        @Override
+        public byte get() {
+            return this.originalAcquisition.get();
         }
 
         @Override
@@ -194,7 +193,7 @@ public final class ByteAcquirable extends Acquirable<ByteAcquisition, WriteByteA
         /**
          * Constructs the {@linkplain ReusedWriteByteAcquisition reused write byte acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param originalAcquisition an original acquisition that should be reusedd
          * @since 1.0
          */
         private ReusedWriteByteAcquisition(@NotNull WriteByteAcquisition originalAcquisition) {
@@ -222,7 +221,7 @@ public final class ByteAcquirable extends Acquirable<ByteAcquisition, WriteByteA
         /**
          * Constructs the {@linkplain ReusedByteAcquisition reused byte acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param originalAcquisition an original acquisition that should be reused
          * @since 1.0
          */
         private ReusedByteAcquisition(@NotNull A originalAcquisition) {

@@ -4,8 +4,6 @@ import net.hypejet.concurrency.Acquirable;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Objects;
-
 /**
  * Represents {@linkplain Acquirable an acquirable}, which guards {@linkplain O an object}, which is allowed to be
  * {@code null}.
@@ -110,7 +108,7 @@ public final class NullableObjectAcquirable<O>
      * @see AbstractNullableObjectAcquisition
      */
     private static final class WriteNullableObjectAcquisitionImpl<O> extends AbstractNullableObjectAcquisition<O>
-            implements WriteNullableObjectAcquisition<O>, SetOperationImplementation<O> {
+            implements SetOperationImplementation<O> {
         /**
          * Constructs the {@linkplain WriteNullableObjectAcquisitionImpl write nullable object acquisition
          * implementation}.
@@ -167,32 +165,32 @@ public final class NullableObjectAcquirable<O>
     }
 
     /**
-     * Represents {@linkplain ReusedNullableObjectAcquisition a reused nullable object acquisition}, which reuses
-     * {@linkplain NullableObjectAcquisition a nullable object acquisition}, whose lock has been upgraded to a write
-     * lock.
+     * Represents an implementation of {@linkplain UpgradedAcquisition an upgraded acquisition}
+     * and {@linkplain WriteNullableObjectAcquisition a write nullable object acquisition}.
      *
-     * @param <O> a type of the object
+     * @param <O> a type of object of the object acquisition that is being reused
      * @since 1.0
-     * @see NullableObjectAcquisition
-     * @see ReusedNullableObjectAcquisition
+     * @see WriteNullableObjectAcquisition
+     * @see UpgradedAcquisition
      */
     private static final class UpgradedNullableObjectAcquisition<O>
-            extends ReusedNullableObjectAcquisition<O, NullableObjectAcquisition<O>>
-            implements WriteNullableObjectAcquisition<O>, SetOperationImplementation<O> {
-
-        private final NullableObjectAcquirable<O> acquirable;
-
+            extends UpgradedAcquisition<NullableObjectAcquisition<O>, NullableObjectAcquirable<O>>
+            implements SetOperationImplementation<O> {
         /**
          * Constructs the {@linkplain UpgradedNullableObjectAcquisition upgraded nullable object acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
-         * @param acquirable an acquirable that owns the original acquisition
+         * @param originalAcquisition an original acquisition that should be reused
+         * @param acquirable an acquirable, which owns the acquisition that should be reused
          * @since 1.0
          */
         private UpgradedNullableObjectAcquisition(@NotNull NullableObjectAcquisition<O> originalAcquisition,
                                                   @NotNull NullableObjectAcquirable<O> acquirable) {
-            super(originalAcquisition);
-            this.acquirable = Objects.requireNonNull(acquirable, "The acquirable must not be null");
+            super(originalAcquisition, acquirable);
+        }
+
+        @Override
+        public @Nullable O get() {
+            return this.originalAcquisition.get();
         }
 
         @Override
@@ -205,7 +203,7 @@ public final class NullableObjectAcquirable<O>
      * Represents {@linkplain ReusedNullableObjectAcquisition a reused nullable object acquisition}, which reuses
      * an already existing {@linkplain WriteNullableObjectAcquisition write nullable object acquisition}.
      *
-     * @param <O> a type of the object
+     * @param <O> a type of object of the object acquisition that is being reused
      * @since 1.0
      * @see WriteNullableObjectAcquisition
      * @see ReusedNullableObjectAcquisition
@@ -216,7 +214,7 @@ public final class NullableObjectAcquirable<O>
         /**
          * Constructs the {@linkplain ReusedWriteNullableObjectAcquisition reused write nullable object acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param originalAcquisition an original acquisition that should be reused
          * @since 1.0
          */
         private ReusedWriteNullableObjectAcquisition(@NotNull WriteNullableObjectAcquisition<O> originalAcquisition) {
@@ -235,18 +233,18 @@ public final class NullableObjectAcquirable<O>
      * Represents an implementation of {@linkplain ReusedAcquisition a reused acquisition} and
      * {@linkplain NullableObjectAcquisition a nullable object acquisition}
      *
-     * @param <V> a type of object of the object acquisition that is being reused
+     * @param <O> a type of object of the object acquisition that is being reused
      * @param <A> a type of the acquisition that is being reused
      * @since 1.0
      * @see NullableObjectAcquisition
      * @see ReusedAcquisition
      */
-    private static class ReusedNullableObjectAcquisition<V, A extends NullableObjectAcquisition<V>>
-            extends ReusedAcquisition<A> implements NullableObjectAcquisition<V> {
+    private static class ReusedNullableObjectAcquisition<O, A extends NullableObjectAcquisition<O>>
+            extends ReusedAcquisition<A> implements NullableObjectAcquisition<O> {
         /**
          * Constructs the {@linkplain ReusedNullableObjectAcquisition reused nullable object acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param originalAcquisition an original acquisition that should be reused
          * @since 1.0
          */
         private ReusedNullableObjectAcquisition(@NotNull A originalAcquisition) {
@@ -255,7 +253,7 @@ public final class NullableObjectAcquirable<O>
         }
 
         @Override
-        public final @Nullable V get() {
+        public final @Nullable O get() {
             return this.originalAcquisition.get();
         }
     }

@@ -4,8 +4,6 @@ import net.hypejet.concurrency.Acquirable;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Objects;
-
 /**
  * Represents {@linkplain Acquirable an acquirable}, which guards an integer.
  *
@@ -99,7 +97,7 @@ public final class IntegerAcquirable extends Acquirable<IntegerAcquisition, Writ
      * @see AbstractIntegerAcquisition
      */
     private static final class WriteIntegerAcquisitionImpl extends AbstractIntegerAcquisition
-            implements WriteIntegerAcquisition, SetOperationImplementation {
+            implements SetOperationImplementation {
         /**
          * Constructs the {@linkplain WriteIntegerAcquisitionImpl write integer acquisition implementation}.
          *
@@ -152,29 +150,30 @@ public final class IntegerAcquirable extends Acquirable<IntegerAcquisition, Writ
     }
 
     /**
-     * Represents {@linkplain ReusedIntegerAcquisition a reused integer acquisition}, which reuses
-     * {@linkplain IntegerAcquisition an integer acquisition}, whose lock has been upgraded to a write lock.
+     * Represents {@linkplain UpgradedAcquisition an upgraded acquisition}
+     * and {@linkplain WriteIntegerAcquisition a write integer acquisition}.
      *
      * @since 1.0
-     * @see IntegerAcquisition
-     * @see ReusedIntegerAcquisition
+     * @see WriteIntegerAcquisition
+     * @see UpgradedAcquisition
      */
-    private static final class UpgradedIntegerAcquisition extends ReusedIntegerAcquisition<IntegerAcquisition>
-            implements WriteIntegerAcquisition, SetOperationImplementation {
-
-        private final IntegerAcquirable acquirable;
-
+    private static final class UpgradedIntegerAcquisition
+            extends UpgradedAcquisition<IntegerAcquisition, IntegerAcquirable> implements SetOperationImplementation {
         /**
          * Constructs the {@linkplain UpgradedIntegerAcquisition upgraded integer acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
-         * @param acquirable an acquirable that owns the original acquisition
+         * @param originalAcquisition an original acquisition that should be reused
+         * @param acquirable an acquirable, which owns the acquisition that should be reused
          * @since 1.0
          */
         private UpgradedIntegerAcquisition(@NotNull IntegerAcquisition originalAcquisition,
                                            @NotNull IntegerAcquirable acquirable) {
-            super(originalAcquisition);
-            this.acquirable = Objects.requireNonNull(acquirable, "The acquirable must not be null");
+            super(originalAcquisition, acquirable);
+        }
+
+        @Override
+        public int get() {
+            return this.originalAcquisition.get();
         }
 
         @Override
@@ -196,7 +195,7 @@ public final class IntegerAcquirable extends Acquirable<IntegerAcquisition, Writ
         /**
          * Constructs the {@linkplain ReusedWriteIntegerAcquisition reused write integer acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param originalAcquisition an original acquisition that should be reused
          * @since 1.0
          */
         private ReusedWriteIntegerAcquisition(@NotNull WriteIntegerAcquisition originalAcquisition) {
@@ -224,7 +223,7 @@ public final class IntegerAcquirable extends Acquirable<IntegerAcquisition, Writ
         /**
          * Constructs the {@linkplain ReusedIntegerAcquisition reused integer acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param originalAcquisition an original acquisition that should be reused
          * @since 1.0
          */
         private ReusedIntegerAcquisition(@NotNull A originalAcquisition) {

@@ -73,10 +73,7 @@ public abstract class MapAcquirable<K, V, M extends Map<K, V>>
     protected final @NotNull MapAcquisition<K, V, M> createUpgradedAcquisition(
             @NotNull MapAcquisition<K, V, M> originalAcquisition
     ) {
-        if (!(originalAcquisition instanceof MapAcquisitionImpl<?, ?, ?, ?> castAcquisition))
-            throw new IllegalArgumentException("The acquisition specified is not a valid map acquisition");
-        castAcquisition.updateGuardedView();
-        return new ReusedMapAcquisition<>(originalAcquisition);
+        return new UpgradedMapAcquisition<>(originalAcquisition, this);
     }
 
     @Override
@@ -139,7 +136,7 @@ public abstract class MapAcquirable<K, V, M extends Map<K, V>>
             <K, V, M extends Map<K, V>, AE extends MapAcquirable<K, V, M>>
             extends AbstractAcquisition<MapAcquisition<K, V, M>, AE> implements MapAcquisition<K, V, M> {
 
-        private @NotNull M guardedView;
+        private final M guardedView;
 
         /**
          * Constructs the {@linkplain MapAcquisitionImpl map acquisition implementation}.
@@ -150,7 +147,13 @@ public abstract class MapAcquirable<K, V, M extends Map<K, V>>
          */
         private MapAcquisitionImpl(@NotNull AE acquirable, @NotNull AcquisitionType type) {
             super(acquirable, type);
-            this.updateGuardedView();
+
+            // Java for some reason needs a cast of the acquirable to access private methods and fields
+            MapAcquirable<K, V, M> castAcquirable = this.acquirable;
+            this.guardedView = castAcquirable.createGuardedView(switch (type) {
+                case READ -> castAcquirable.readOnlyView;
+                case WRITE -> castAcquirable.map;
+            }, this);
         }
 
         @Override
@@ -163,14 +166,44 @@ public abstract class MapAcquirable<K, V, M extends Map<K, V>>
         protected @NotNull MapAcquisition<K, V, M> cast() {
             return this;
         }
+    }
+    /**
+     * Represents an implementation of {@linkplain UpgradedAcquisition an upgraded acquisition} and
+     * {@linkplain MapAcquisition a map acquisition}.
+     *
+     * @param <K> a type of key of the following map
+     * @param <V> a type of value of the following map
+     * @param <M> a type of graded map of the map acquisition that is being reused
+     * @param <AE> a type of acquirable, which owns the map acquisition that is being reused
+     * @since 1.0
+     * @see MapAcquisition
+     * @see net.hypejet.concurrency.Acquirable.UpgradedAcquisition
+     */
+    private final static class UpgradedMapAcquisition
+            <K, V, M extends Map<K, V>, AE extends MapAcquirable<K, V, M>>
+            extends UpgradedAcquisition<MapAcquisition<K, V, M>, AE> implements MapAcquisition<K, V, M> {
 
-        private void updateGuardedView() {
+        private final M guardedView;
+
+        /**
+         * Constructs the {@linkplain UpgradedMapAcquisition upgraded map acquisition}.
+         *
+         * @param originalAcquisition an original acquisition that should be reused
+         * @param acquirable an acquirable, which owns the acquisition that should be reused
+         * @since 1.0
+         */
+        private UpgradedMapAcquisition(@NotNull MapAcquisition<K, V, M> originalAcquisition, @NotNull AE acquirable) {
+            super(originalAcquisition, acquirable);
+
             // Java for some reason needs a cast of the acquirable to access private methods and fields
             MapAcquirable<K, V, M> castAcquirable = this.acquirable;
-            this.guardedView = castAcquirable.createGuardedView(switch (this.acquisitionType()) {
-                case READ -> castAcquirable.readOnlyView;
-                case WRITE -> castAcquirable.map;
-            }, this);
+            this.guardedView = castAcquirable.createGuardedView(castAcquirable.map, originalAcquisition);
+        }
+
+        @Override
+        public @NotNull M map() {
+            this.ensurePermittedAndLocked();
+            return this.guardedView;
         }
     }
 
@@ -191,7 +224,7 @@ public abstract class MapAcquirable<K, V, M extends Map<K, V>>
         /**
          * Constructs the {@linkplain ReusedMapAcquisition reused map acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param originalAcquisition an original acquisition that should be reused
          * @since 1.0
          */
         private ReusedMapAcquisition(@NotNull A originalAcquisition) {

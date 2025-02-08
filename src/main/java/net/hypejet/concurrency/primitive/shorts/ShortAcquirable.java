@@ -4,8 +4,6 @@ import net.hypejet.concurrency.Acquirable;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Objects;
-
 /**
  * Represents {@linkplain Acquirable an acquirable}, which guards a short.
  *
@@ -97,7 +95,7 @@ public final class ShortAcquirable extends Acquirable<ShortAcquisition, WriteSho
      * @see AbstractShortAcquisition
      */
     private static final class WriteShortAcquisitionImpl extends AbstractShortAcquisition
-            implements WriteShortAcquisition, SetOperationImplementation {
+            implements SetOperationImplementation {
         /**
          * Constructs the {@linkplain WriteShortAcquisitionImpl write short acquisition implementation}.
          *
@@ -116,38 +114,6 @@ public final class ShortAcquirable extends Acquirable<ShortAcquisition, WriteSho
     }
 
     /**
-     * Represents {@linkplain ReusedShortAcquisition a reused short acquisition}, which reuses
-     * {@linkplain ShortAcquisition a short acquisition}, whose lock has been upgraded to a write lock.
-     *
-     * @since 1.0
-     * @see ShortAcquisition
-     * @see ReusedShortAcquisition
-     */
-    private static final class UpgradedShortAcquisition extends ReusedShortAcquisition<ShortAcquisition>
-            implements WriteShortAcquisition, SetOperationImplementation {
-
-        private final ShortAcquirable acquirable;
-
-        /**
-         * Constructs the {@linkplain UpgradedShortAcquisition upgraded short acquisition}.
-         *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
-         * @param acquirable an acquirable that owns the original acquisition
-         * @since 1.0
-         */
-        private UpgradedShortAcquisition(@NotNull ShortAcquisition originalAcquisition,
-                                         @NotNull ShortAcquirable acquirable) {
-            super(originalAcquisition);
-            this.acquirable = Objects.requireNonNull(acquirable, "The acquirable must not be null");
-        }
-
-        @Override
-        public @NotNull ShortAcquirable acquirable() {
-            return this.acquirable;
-        }
-    }
-
-    /**
      * Represents a common implementation of {@linkplain AbstractAcquisition an abstract acquisition}
      * and {@linkplain ShortAcquisition a short acquisition}.
      *
@@ -157,6 +123,7 @@ public final class ShortAcquirable extends Acquirable<ShortAcquisition, WriteSho
      */
     private static abstract class AbstractShortAcquisition
             extends AbstractAcquisition<ShortAcquisition, ShortAcquirable> implements ShortAcquisition {
+
         /**
          * Constructs the {@linkplain AbstractShortAcquisition abstract short acquisition}.
          *
@@ -168,7 +135,6 @@ public final class ShortAcquirable extends Acquirable<ShortAcquisition, WriteSho
             // There is no need to check whether the acquirable is null, the superclass will do that for us
             super(acquirable, type);
         }
-
         @Override
         public final short get() {
             this.ensurePermittedAndLocked();
@@ -178,6 +144,40 @@ public final class ShortAcquirable extends Acquirable<ShortAcquisition, WriteSho
         @Override
         protected final @NotNull ShortAcquisition cast() {
             return this;
+        }
+
+    }
+
+    /**
+     * Represents an implementation of {@linkplain UpgradedAcquisition an upgraded acquisition}
+     * and {@linkplain WriteShortAcquisition a write short acquisition}.
+     *
+     * @since 1.0
+     * @see WriteShortAcquisition
+     * @see UpgradedAcquisition
+     */
+    private static final class UpgradedShortAcquisition extends UpgradedAcquisition<ShortAcquisition, ShortAcquirable>
+            implements SetOperationImplementation {
+        /**
+         * Constructs the {@linkplain UpgradedShortAcquisition upgraded short acquisition}.
+         *
+         * @param originalAcquisition an original acquisition that should be reused
+         * @param acquirable an acquirable, which owns the acquisition that should be reused
+         * @since 1.0
+         */
+        private UpgradedShortAcquisition(@NotNull ShortAcquisition originalAcquisition,
+                                         @NotNull ShortAcquirable acquirable) {
+            super(originalAcquisition, acquirable);
+        }
+
+        @Override
+        public short get() {
+            return this.originalAcquisition.get();
+        }
+
+        @Override
+        public @NotNull ShortAcquirable acquirable() {
+            return this.acquirable;
         }
     }
 
@@ -191,10 +191,11 @@ public final class ShortAcquirable extends Acquirable<ShortAcquisition, WriteSho
      */
     private static final class ReusedWriteShortAcquisition
             extends ReusedShortAcquisition<WriteShortAcquisition> implements WriteShortAcquisition {
+
         /**
          * Constructs the {@linkplain ReusedWriteShortAcquisition reused write short acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param originalAcquisition an original acquisition that should be reused
          * @since 1.0
          */
         private ReusedWriteShortAcquisition(@NotNull WriteShortAcquisition originalAcquisition) {
@@ -222,7 +223,7 @@ public final class ShortAcquirable extends Acquirable<ShortAcquisition, WriteSho
         /**
          * Constructs the {@linkplain ReusedShortAcquisition reused short acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param originalAcquisition an original acquisition that should be reused
          * @since 1.0
          */
         private ReusedShortAcquisition(@NotNull A originalAcquisition) {

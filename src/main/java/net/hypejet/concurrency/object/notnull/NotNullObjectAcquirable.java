@@ -98,7 +98,7 @@ public final class NotNullObjectAcquirable<O>
      * @see AbstractNotNullObjectAcquisition
      */
     private static final class WriteNotNullObjectAcquisitionImpl<O> extends AbstractNotNullObjectAcquisition<O>
-            implements WriteNotNullObjectAcquisition<O>, SetOperationImplementation<O> {
+            implements SetOperationImplementation<O> {
         /**
          * Constructs the {@linkplain WriteNotNullObjectAcquisitionImpl write not-null object acquisition
          * implementation}.
@@ -155,32 +155,32 @@ public final class NotNullObjectAcquirable<O>
     }
 
     /**
-     * Represents {@linkplain ReusedNotNullObjectAcquisition a reused not-null object acquisition}, which reuses
-     * {@linkplain NotNullObjectAcquisition a not-null object acquisition}, whose lock has been upgraded to a write
-     * lock.
+     * Represents an implementation of {@linkplain UpgradedAcquisition an upgraded acquisition}
+     * and {@linkplain WriteNotNullObjectAcquisition a write not-null object acquisition}.
      *
-     * @param <O> a type of the object
+     * @param <O> a type of object of the object acquisition that is being reused
      * @since 1.0
-     * @see NotNullObjectAcquisition
-     * @see ReusedNotNullObjectAcquisition
+     * @see WriteNotNullObjectAcquisition
+     * @see UpgradedAcquisition
      */
     private static final class UpgradedNotNullObjectAcquisition<O>
-            extends ReusedNotNullObjectAcquisition<O, NotNullObjectAcquisition<O>>
-            implements WriteNotNullObjectAcquisition<O>, SetOperationImplementation<O> {
-
-        private final NotNullObjectAcquirable<O> acquirable;
-
+            extends UpgradedAcquisition<NotNullObjectAcquisition<O>, NotNullObjectAcquirable<O>>
+            implements SetOperationImplementation<O> {
         /**
          * Constructs the {@linkplain UpgradedNotNullObjectAcquisition upgraded not-null object acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
-         * @param acquirable an acquirable that owns the original acquisition
+         * @param originalAcquisition an original acquisition that should be reused
+         * @param acquirable an acquirable, which owns the acquisition that should be reused
          * @since 1.0
          */
         private UpgradedNotNullObjectAcquisition(@NotNull NotNullObjectAcquisition<O> originalAcquisition,
                                                  @NotNull NotNullObjectAcquirable<O> acquirable) {
-            super(originalAcquisition);
-            this.acquirable = Objects.requireNonNull(acquirable, "The acquirable must not be null");
+            super(originalAcquisition, acquirable);
+        }
+
+        @Override
+        public @NotNull O get() {
+            return this.originalAcquisition.get();
         }
 
         @Override
@@ -193,7 +193,7 @@ public final class NotNullObjectAcquirable<O>
      * Represents {@linkplain ReusedNotNullObjectAcquisition a reused not-null object acquisition}, which reuses
      * an already existing {@linkplain WriteNotNullObjectAcquisition write not-null object acquisition}.
      *
-     * @param <O> a type of the object
+     * @param <O> a type of object of the object acquisition that is being reused
      * @since 1.0
      * @see WriteNotNullObjectAcquisition
      * @see ReusedNotNullObjectAcquisition
@@ -204,7 +204,7 @@ public final class NotNullObjectAcquirable<O>
         /**
          * Constructs the {@linkplain ReusedWriteNotNullObjectAcquisition reused write not-null object acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param originalAcquisition an original acquisition that should be reused
          * @since 1.0
          */
         private ReusedWriteNotNullObjectAcquisition(@NotNull WriteNotNullObjectAcquisition<O> originalAcquisition) {
@@ -234,7 +234,7 @@ public final class NotNullObjectAcquirable<O>
         /**
          * Constructs the {@linkplain ReusedNotNullObjectAcquisition reused not-null object acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param originalAcquisition an original acquisition that should be reused
          * @since 1.0
          */
         private ReusedNotNullObjectAcquisition(@NotNull A originalAcquisition) {

@@ -71,10 +71,7 @@ public abstract class CollectionAcquirable<E, C extends Collection<E>>
     protected final @NotNull CollectionAcquisition<E, C> createUpgradedAcquisition(
             @NotNull CollectionAcquisition<E, C> originalAcquisition
     ) {
-        if (!(originalAcquisition instanceof CollectionAcquisitionImpl<?, ?, ?> castAcquisition))
-            throw new IllegalArgumentException("The acquisition specified is not a valid collection acquisition");
-        castAcquisition.updateGuardedView();
-        return new ReusedCollectionAcquisition<>(originalAcquisition);
+        return new UpgradedCollectionAcquisition<>(originalAcquisition, this);
     }
 
     @Override
@@ -137,7 +134,7 @@ public abstract class CollectionAcquirable<E, C extends Collection<E>>
             <E, C extends Collection<E>, AE extends CollectionAcquirable<E, C>>
             extends AbstractAcquisition<CollectionAcquisition<E, C>, AE> implements CollectionAcquisition<E, C> {
 
-        private @NotNull C guardedView;
+        private final C guardedView;
 
         /**
          * Constructs the {@linkplain CollectionAcquisitionImpl collection acquisition}.
@@ -148,7 +145,13 @@ public abstract class CollectionAcquirable<E, C extends Collection<E>>
          */
         private CollectionAcquisitionImpl(@NotNull AE acquirable, @NotNull AcquisitionType type) {
             super(acquirable, type);
-            this.updateGuardedView();
+
+            // Java for some reason needs a cast of the acquirable to access private methods and fields
+            CollectionAcquirable<E, C> castAcquirable = this.acquirable;
+            this.guardedView = this.acquirable.createGuardedView(switch (type) {
+                case READ -> castAcquirable.readOnlyView;
+                case WRITE -> castAcquirable.collection;
+            }, this.safeCast());
         }
         @Override
         public @NotNull C collection() {
@@ -160,14 +163,45 @@ public abstract class CollectionAcquirable<E, C extends Collection<E>>
         protected @NotNull CollectionAcquisition<E, C> cast() {
             return this;
         }
+    }
 
-        private void updateGuardedView() {
+    /**
+     * Represents an implementation of {@linkplain UpgradedAcquisition an upgraded acquisition} and
+     * {@linkplain CollectionAcquisition a collection acquisition}.
+     *
+     * @param <E> a type of elements of the following collection
+     * @param <C> a type of guarded collection of the collection acquisition that is being reused
+     * @param <AE> a type of acquirable of the collection acquisition that is being reused
+     * @since 1.0
+     * @see CollectionAcquisition
+     * @see UpgradedAcquisition
+     */
+    private final static class UpgradedCollectionAcquisition
+            <E, C extends Collection<E>, AE extends CollectionAcquirable<E, C>>
+            extends UpgradedAcquisition<CollectionAcquisition<E, C>, AE> implements CollectionAcquisition<E, C> {
+
+        private final C guardedView;
+
+        /**
+         * Constructs the {@linkplain UpgradedCollectionAcquisition upgraded collection acquisition}.
+         *
+         * @param originalAcquisition an original acquisition that should be reused
+         * @param acquirable an acquirable, which owns the acquisition that should be reused
+         * @since 1.0
+         */
+        private UpgradedCollectionAcquisition(@NotNull CollectionAcquisition<E, C> originalAcquisition,
+                                              @NotNull AE acquirable) {
+            super(originalAcquisition, acquirable);
+
             // Java for some reason needs a cast of the acquirable to access private methods and fields
             CollectionAcquirable<E, C> castAcquirable = this.acquirable;
-            this.guardedView = this.acquirable.createGuardedView(switch (this.acquisitionType()) {
-                case READ -> castAcquirable.readOnlyView;
-                case WRITE -> castAcquirable.collection;
-            }, this.safeCast());
+            this.guardedView = this.acquirable.createGuardedView(castAcquirable.collection, originalAcquisition);
+        }
+
+        @Override
+        public @NotNull C collection() {
+            this.ensurePermittedAndLocked();
+            return this.guardedView;
         }
     }
 
@@ -188,7 +222,7 @@ public abstract class CollectionAcquirable<E, C extends Collection<E>>
         /**
          * Constructs the {@linkplain ReusedCollectionAcquisition reused collection acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param originalAcquisition an original acquisition that should be reused
          * @since 1.0
          */
         private ReusedCollectionAcquisition(@NotNull A originalAcquisition) {

@@ -91,18 +91,8 @@ public abstract class Acquirable<A extends Acquisition, WA extends A> {
             return reusedAcquisition;
         }
 
-        AbstractAcquisition<?, ?> validatedAcquisition = this.validate(foundAcquisition);
-
-        long lockStamp = this.lock.tryConvertToWriteLock(validatedAcquisition.lockStamp);
-        if (lockStamp == 0)
-            throw new IllegalStateException("Could not convert the read lock to a write lock");
-
-        validatedAcquisition.setLockStamp(lockStamp);
-
         WA upgrade = this.createUpgradedAcquisition(foundAcquisition);
-        ensureReused(upgrade);
-
-        this.acquisitions.put(validatedAcquisition.owner, upgrade);
+        ensureUpgraded(upgrade);
         return upgrade;
     }
 
@@ -148,7 +138,7 @@ public abstract class Acquirable<A extends Acquisition, WA extends A> {
      * Creates a reused acquisition of the read acquisition specified, however, the reused acquisition should support
      * write operations. Lock of the read acquisition has been upgraded to a write lock.
      *
-     * <p>The created acquisition must extend {@linkplain ReusedAcquisition reused acquisition}.</p>
+     * <p>The created acquisition must extend {@linkplain UpgradedAcquisition upgraded acquisition}.</p>
      *
      * @param originalAcquisition the acquisition to upgrade
      * @return the upgraded acquisition created
@@ -210,6 +200,19 @@ public abstract class Acquirable<A extends Acquisition, WA extends A> {
     }
 
     /**
+     * Ensures that {@linkplain Acquisition an acquisition} specified is
+     * {@linkplain UpgradedAcquisition an upgraded acquisition}.
+     *
+     * @param acquisition the acquisition to ensure that is an upgraded acquisition
+     * @since 1.0
+     */
+    private static void ensureUpgraded(@NotNull Acquisition acquisition) {
+        Objects.requireNonNull(acquisition, "The acquisition must not be null");
+        if (!(acquisition instanceof Acquirable.UpgradedAcquisition<?, ?>))
+            throw new IllegalArgumentException("The acquisition specified must extend an upgrade acquisition");
+    }
+
+    /**
      * Represents an abstract implementation of {@linkplain Acquisition acquisition}.
      *
      * @param <AN> a type of acquisition that the following acquirable
@@ -223,9 +226,12 @@ public abstract class Acquirable<A extends Acquisition, WA extends A> {
         protected final AE acquirable;
 
         private final Thread owner;
+        private final AcquisitionType type;
 
         private long lockStamp;
         private boolean unlocked;
+
+        private int upgradedLockCount;
 
         /**
          * Constructs the {@linkplain AbstractAcquisition abstract acquisition}.
@@ -236,9 +242,9 @@ public abstract class Acquirable<A extends Acquisition, WA extends A> {
          */
         protected AbstractAcquisition(@NotNull AE acquirable, @NotNull AcquisitionType type) {
             this.acquirable = Objects.requireNonNull(acquirable, "The acquirable must not be null");
-            Objects.requireNonNull(type, "The type must not be null");
 
             this.owner = Thread.currentThread();
+            this.type = Objects.requireNonNull(type, "The type must not be null");
 
             // Java for some reason needs a cast of the acquirable to access private methods and fields
             Acquirable<AN, ?> castAcquirable = acquirable;
@@ -279,11 +285,7 @@ public abstract class Acquirable<A extends Acquisition, WA extends A> {
 
         @Override
         public final @NotNull AcquisitionType acquisitionType() {
-            if (StampedLock.isReadLockStamp(this.lockStamp))
-                return AcquisitionType.READ;
-            if (StampedLock.isWriteLockStamp(this.lockStamp))
-                return AcquisitionType.WRITE;
-            throw new IllegalStateException("The acquisition has an invalid type");
+            return this.type;
         }
 
         /**
@@ -317,8 +319,113 @@ public abstract class Acquirable<A extends Acquisition, WA extends A> {
                 throw new IllegalArgumentException("The caller thread does not own the acquisition");
         }
 
-        private void setLockStamp(long lockStamp) {
+        private void incrementUpgradedLockCount() {
+            if (this.upgradedLockCount++ > 0)
+                return;
+
+            // Java for some reason needs a cast of the acquirable to access private methods and fields
+            Acquirable<AN, ?> castAcquirable = this.acquirable;
+
+            long lockStamp = castAcquirable.lock.tryConvertToWriteLock(this.lockStamp);
+            if (lockStamp == 0)
+                throw new IllegalStateException("Could not convert the acquisition to a write acquisition");
+
             this.lockStamp = lockStamp;
+        }
+
+        private void decrementUpgradedLockCount() {
+            this.upgradedLockCount--;
+            if (this.upgradedLockCount != 0)
+                return;
+
+            // Java for some reason needs a cast of the acquirable to access private methods and fields
+            Acquirable<AN, ?> castAcquirable = this.acquirable;
+
+            long lockStamp = castAcquirable.lock.tryConvertToReadLock(this.lockStamp);
+            if (lockStamp == 0)
+                throw new IllegalStateException("Could not convert the acquisition to a read acquisition");
+
+            this.lockStamp = lockStamp;
+        }
+    }
+
+
+    /**
+     * Represents an implementation of {@linkplain Acquisition an acquisition}, which reuses
+     * {@linkplain Acquisition an acquisition}, which has been already created.
+     *
+     * @param <A> a type of the acquisition that is being reused
+     * @since 1.0
+     * @see Acquisition
+     */
+    protected static class ReusedAcquisition<A extends Acquisition> extends AbstractReusedAcquisition<A> {
+        /**
+         * Constructs the {@linkplain ReusedAcquisition reused acquisition}.
+         *
+         * @param originalAcquisition an original acquisition should be reused
+         * @since 1.0
+         */
+        protected ReusedAcquisition(@NotNull A originalAcquisition) {
+            super(originalAcquisition);
+        }
+
+        @Override
+        public final void close() {
+            // NOOP
+        }
+
+        @Override
+        public @NotNull AcquisitionType acquisitionType() {
+            return this.originalAcquisition.acquisitionType();
+        }
+    }
+
+    /**
+     * Represents an implementation of {@linkplain Acquisition an acquisition}, which provides write operations
+     * by reusing {@linkplain Acquisition an acquisition}
+     * of {@linkplain Acquisition.AcquisitionType#READ read acquisition type}, which has been already created.
+     *
+     * @param <AN> a type of the acquisition that is being reused
+     * @param <AE> a type of acquirable of the acquisition that is being reused
+     * @since 1.0
+     * @see Acquisition
+     */
+    protected static class UpgradedAcquisition<AN extends Acquisition, AE extends Acquirable<AN, ?>>
+            extends AbstractReusedAcquisition<AN> implements Acquisition {
+
+        protected final AE acquirable;
+
+        /**
+         * Constructs the {@linkplain UpgradedAcquisition upgraded acquisition}.
+         *
+         * @param originalAcquisition an original acquisition that should be reused
+         * @param acquirable an acquirable, which owns the acquisition that should be reused
+         * @since 1.0
+         */
+        protected UpgradedAcquisition(@NotNull AN originalAcquisition, @NotNull AE acquirable) {
+            super(originalAcquisition);
+            this.acquirable = Objects.requireNonNull(acquirable, "The acquirable must not be null");
+
+            // Java for some reason needs a cast of the acquirable to access private methods and fields
+            Acquirable<AN, ?> castAcquirable = acquirable;
+            AbstractAcquisition<?, ?> validatedAcquisition = castAcquirable.validate(originalAcquisition);
+            validatedAcquisition.incrementUpgradedLockCount();
+        }
+
+        @Override
+        public final void close() {
+            this.ensurePermittedAndLocked();
+
+            // Java for some reason needs a cast of the acquirable to access private methods and fields
+            Acquirable<AN, ?> castAcquirable = this.acquirable;
+            AbstractAcquisition<?, ?> validatedAcquisition = castAcquirable.validate(this.originalAcquisition);
+
+            validatedAcquisition.decrementUpgradedLockCount();
+        }
+
+        @Override
+        public final @NotNull AcquisitionType acquisitionType() {
+            return AcquisitionType.WRITE;
         }
     }
 
@@ -330,18 +437,21 @@ public abstract class Acquirable<A extends Acquisition, WA extends A> {
      * @since 1.0
      * @see Acquisition
      */
-    protected static class ReusedAcquisition<A extends Acquisition> implements Acquisition {
+    private static abstract class AbstractReusedAcquisition<A extends Acquisition> implements Acquisition {
 
         protected final A originalAcquisition;
 
         /**
          * Constructs the {@linkplain ReusedAcquisition reused acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param originalAcquisition an original acquisition should be reused
          * @since 1.0
          */
-        protected ReusedAcquisition(@NotNull A originalAcquisition) {
-            this.originalAcquisition = Objects.requireNonNull(originalAcquisition, "original acquisition");
+        private AbstractReusedAcquisition(@NotNull A originalAcquisition) {
+            this.originalAcquisition = Objects.requireNonNull(
+                    originalAcquisition,
+                    "The original acquisition must not be null"
+            );
         }
 
         @Override
@@ -351,18 +461,8 @@ public abstract class Acquirable<A extends Acquisition, WA extends A> {
         }
 
         @Override
-        public final void close() {
-            // NOOP
-        }
-
-        @Override
         public final void ensurePermittedAndLocked() {
             this.originalAcquisition.ensurePermittedAndLocked();
-        }
-
-        @Override
-        public final @NotNull AcquisitionType acquisitionType() {
-            return this.originalAcquisition.acquisitionType();
         }
     }
 }

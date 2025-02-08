@@ -4,8 +4,6 @@ import net.hypejet.concurrency.Acquirable;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Objects;
-
 /**
  * Represents {@linkplain Acquirable an acquirable}, which guards a character.
  *
@@ -89,7 +87,7 @@ public final class CharacterAcquirable extends Acquirable<CharacterAcquisition, 
      * @see AbstractCharacterAcquisition
      */
     private static final class WriteCharacterAcquisitionImpl extends AbstractCharacterAcquisition
-            implements WriteCharacterAcquisition, SetOperationImplementation {
+            implements SetOperationImplementation {
         /**
          * Constructs the {@linkplain WriteCharacterAcquisitionImpl write character acquisition implementation}.
          *
@@ -143,29 +141,31 @@ public final class CharacterAcquirable extends Acquirable<CharacterAcquisition, 
     }
 
     /**
-     * Represents {@linkplain ReusedCharacterAcquisition a reused character acquisition}, which reuses
-     * {@linkplain CharacterAcquisition a character acquisition}, whose lock has been upgraded to a write lock.
+     * Represents an implementation of {@linkplain UpgradedAcquisition an upgraded acquisition}
+     * and {@linkplain WriteCharacterAcquisition a write character acquisition}.
      *
      * @since 1.0
-     * @see CharacterAcquisition
-     * @see ReusedCharacterAcquisition
+     * @see WriteCharacterAcquisition
+     * @see UpgradedAcquisition
      */
-    private static final class UpgradedCharacterAcquisition extends ReusedCharacterAcquisition<CharacterAcquisition>
-            implements WriteCharacterAcquisition, SetOperationImplementation {
-
-        private final CharacterAcquirable acquirable;
-
+    private static final class UpgradedCharacterAcquisition
+            extends UpgradedAcquisition<CharacterAcquisition, CharacterAcquirable>
+            implements SetOperationImplementation {
         /**
          * Constructs the {@linkplain UpgradedCharacterAcquisition upgraded character acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
-         * @param acquirable an acquirable that owns the original acquisition
+         * @param originalAcquisition an original acquisition that should be reused
+         * @param acquirable an acquirable, which owns the acquisition that should be reused
          * @since 1.0
          */
         private UpgradedCharacterAcquisition(@NotNull CharacterAcquisition originalAcquisition,
                                              @NotNull CharacterAcquirable acquirable) {
-            super(originalAcquisition);
-            this.acquirable = Objects.requireNonNull(acquirable, "The acquirable must not be null");
+            super(originalAcquisition, acquirable);
+        }
+
+        @Override
+        public char get() {
+            return this.originalAcquisition.get();
         }
 
         @Override
@@ -188,7 +188,7 @@ public final class CharacterAcquirable extends Acquirable<CharacterAcquisition, 
         /**
          * Constructs the {@linkplain ReusedWriteCharacterAcquisition reused write character acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param originalAcquisition an original acquisition that should be reused
          * @since 1.0
          */
         private ReusedWriteCharacterAcquisition(@NotNull WriteCharacterAcquisition originalAcquisition) {
@@ -216,7 +216,7 @@ public final class CharacterAcquirable extends Acquirable<CharacterAcquisition, 
         /**
          * Constructs the {@linkplain ReusedCharacterAcquisition reused character acquisition}.
          *
-         * @param originalAcquisition an original acquisition to create the reused acquisition with
+         * @param originalAcquisition an original acquisition that should be reused
          * @since 1.0
          */
         private ReusedCharacterAcquisition(@NotNull A originalAcquisition) {
